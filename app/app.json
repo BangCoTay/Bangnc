@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "AI Companions",
+    "slug": "ai-companions",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "ai-companions",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0A0A0F"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aicompanions.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0A0F"
+      },
+      "package": "com.aicompanions.app"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

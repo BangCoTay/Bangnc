@@ -1,0 +1,16 @@
+{
+  "name": "ai-companions",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "server",
+    "app"
+  ],
+  "scripts": {
+    "server:dev": "npm run dev --workspace=server",
+    "app:dev": "npm run dev --workspace=app",
+    "shared:build": "npm run build --workspace=shared",
+    "seed": "npm run seed --workspace=server"
+  }
+}
