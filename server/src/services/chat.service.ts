@@ -65,7 +65,7 @@ export class ChatService {
     }
 
     // Increment chat count on character
-    await supabaseAdmin.rpc('increment_chat_count', { char_id: characterId }).catch(() => {});
+    await supabaseAdmin.rpc('increment_chat_count', { char_id: characterId });
 
     return conversation as Conversation;
   }
@@ -162,7 +162,9 @@ export class ChatService {
       .eq('id', conversationId);
 
     // Increment message count
-    await supabaseAdmin.rpc('increment_message_count', { conv_id: conversationId }).catch(async () => {
+    const { error: rpcError } = await supabaseAdmin.rpc('increment_message_count', { conv_id: conversationId });
+    
+    if (rpcError) {
       // Fallback
       const { data: conv } = await supabaseAdmin
         .from('conversations')
@@ -175,7 +177,7 @@ export class ChatService {
           .update({ message_count: (conv.message_count || 0) + 1 })
           .eq('id', conversationId);
       }
-    });
+    }
 
     return message as Message;
   }

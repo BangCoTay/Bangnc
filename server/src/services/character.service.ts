@@ -123,10 +123,11 @@ export class CharacterService {
 
     if (existing) {
       await supabaseAdmin.from('user_favorites').delete().eq('id', existing.id);
-      await supabaseAdmin.rpc('decrement_favorite_count', { char_id: characterId }).catch(() => {
+      const { error: rpcError } = await supabaseAdmin.rpc('decrement_favorite_count', { char_id: characterId });
+      if (rpcError) {
         // Fallback: direct update
-        supabaseAdmin.from('characters').update({ favorite_count: Math.max(0, 0) }).eq('id', characterId);
-      });
+        await supabaseAdmin.from('characters').update({ favorite_count: 0 }).eq('id', characterId);
+      }
       return { is_favorited: false };
     } else {
       await supabaseAdmin.from('user_favorites').insert({ user_id: userId, character_id: characterId });
