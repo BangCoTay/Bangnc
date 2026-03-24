@@ -1,23 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, Dimensions,
-} from 'react-native';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, typography, spacing, borderRadius } from '../src/theme';
-import { useCharacterStore } from '../src/stores/characterStore';
-import { useChatStore } from '../src/stores/chatStore';
-import type { Character } from '@ai-companions/shared';
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Dimensions,
+} from "react-native";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
+import { router, useLocalSearchParams } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors, typography, spacing, borderRadius } from '../../src/theme';
+import { useCharacterStore } from '../../src/stores/characterStore';
+import { useChatStore } from '../../src/stores/chatStore';
+import type { Character } from "@ai-companions/shared";
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export default function CharacterDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { selectedCharacter, fetchCharacterById, toggleFavorite } = useCharacterStore();
+  const { selectedCharacter, fetchCharacterById, toggleFavorite } =
+    useCharacterStore();
   const { startConversation } = useChatStore();
   const [loading, setLoading] = useState(true);
   const [startingChat, setStartingChat] = useState(false);
@@ -70,18 +76,24 @@ export default function CharacterDetailScreen() {
               style={styles.heroImage}
             />
           ) : (
-            <LinearGradient colors={[colors.primary, colors.accent]} style={styles.heroImage}>
+            <LinearGradient
+              colors={[colors.primary, colors.accent]}
+              style={styles.heroImage}
+            >
               <Text style={styles.heroInitial}>{character.name[0]}</Text>
             </LinearGradient>
           )}
           <LinearGradient
-            colors={['transparent', colors.background]}
+            colors={["transparent", colors.background]}
             style={styles.heroOverlay}
           />
 
           {/* Back button */}
-          <SafeAreaView edges={['top']} style={styles.backButtonContainer}>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <SafeAreaView edges={["top"]} style={styles.backButtonContainer}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.back()}
+            >
               <Ionicons name="chevron-back" size={24} color="#fff" />
             </TouchableOpacity>
             <View style={styles.headerActions}>
@@ -90,9 +102,9 @@ export default function CharacterDetailScreen() {
                 onPress={() => toggleFavorite(character.id)}
               >
                 <Ionicons
-                  name={character.is_favorited ? 'heart' : 'heart-outline'}
+                  name={character.is_favorited ? "heart" : "heart-outline"}
                   size={22}
-                  color={character.is_favorited ? colors.error : '#fff'}
+                  color={character.is_favorited ? colors.error : "#fff"}
                 />
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton}>
@@ -108,7 +120,11 @@ export default function CharacterDetailScreen() {
             <Text style={styles.name}>{character.name}</Text>
             {character.is_official && (
               <View style={styles.officialBadge}>
-                <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+                <Ionicons
+                  name="checkmark-circle"
+                  size={16}
+                  color={colors.primary}
+                />
                 <Text style={styles.officialText}>Official</Text>
               </View>
             )}
@@ -124,7 +140,9 @@ export default function CharacterDetailScreen() {
             </View>
             <View style={styles.statChip}>
               <Ionicons name="heart" size={14} color={colors.accentPink} />
-              <Text style={styles.statText}>{character.favorite_count} likes</Text>
+              <Text style={styles.statText}>
+                {character.favorite_count} likes
+              </Text>
             </View>
             <View style={styles.statChip}>
               <Text style={styles.statText}>{character.style}</Text>
@@ -173,8 +191,18 @@ export default function CharacterDetailScreen() {
               <Text style={styles.sectionTitle}>Interests</Text>
               <View style={styles.traitContainer}>
                 {personality.interests.map((interest) => (
-                  <View key={interest} style={[styles.traitChip, { borderColor: colors.accentCyan }]}>
-                    <Text style={[styles.traitText, { color: colors.accentCyan }]}>{interest}</Text>
+                  <View
+                    key={interest}
+                    style={[
+                      styles.traitChip,
+                      { borderColor: colors.accentCyan },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.traitText, { color: colors.accentCyan }]}
+                    >
+                      {interest}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -186,7 +214,9 @@ export default function CharacterDetailScreen() {
             <View style={styles.descSection}>
               <Text style={styles.sectionTitle}>First Message</Text>
               <View style={styles.greetingCard}>
-                <Text style={styles.greetingText}>{character.greeting_message}</Text>
+                <Text style={styles.greetingText}>
+                  {character.greeting_message}
+                </Text>
               </View>
             </View>
           )}
@@ -226,79 +256,179 @@ export default function CharacterDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  loadingContainer: { flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   errorText: { fontSize: typography.size.lg, color: colors.textSecondary },
 
   // Hero
-  hero: { height: 340, position: 'relative' },
-  heroImage: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
-  heroInitial: { fontSize: 80, fontWeight: '700', color: '#fff' },
-  heroOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120 },
+  hero: { height: 340, position: "relative" },
+  heroImage: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  heroInitial: { fontSize: 80, fontWeight: "700", color: "#fff" },
+  heroOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+  },
   backButtonContainer: {
-    position: 'absolute', top: 0, left: 0, right: 0,
-    flexDirection: 'row', justifyContent: 'space-between',
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingHorizontal: spacing.base,
   },
   backButton: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  headerActions: { flexDirection: 'row', gap: spacing.sm },
+  headerActions: { flexDirection: "row", gap: spacing.sm },
   actionButton: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   // Info
   infoSection: { paddingHorizontal: spacing.base },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
-  name: { fontSize: typography.size['2xl'], fontWeight: '700', color: colors.textPrimary },
-  officialBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  officialText: { fontSize: typography.size.xs, color: colors.primary, fontWeight: '500' },
-  tagline: { fontSize: typography.size.base, color: colors.textSecondary, marginBottom: spacing.lg, lineHeight: typography.lineHeight.base },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  name: {
+    fontSize: typography.size["2xl"],
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  officialBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+  officialText: {
+    fontSize: typography.size.xs,
+    color: colors.primary,
+    fontWeight: "500",
+  },
+  tagline: {
+    fontSize: typography.size.base,
+    color: colors.textSecondary,
+    marginBottom: spacing.lg,
+    lineHeight: typography.lineHeight.base,
+  },
 
-  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
+  statsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
   statChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: colors.surface, paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs, borderRadius: borderRadius.full,
-    borderWidth: 1, borderColor: colors.cardBorder,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   statText: { fontSize: typography.size.xs, color: colors.textSecondary },
 
-  categories: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.xl },
-  categoryBadge: {
-    backgroundColor: colors.primaryMuted, paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs, borderRadius: borderRadius.full,
+  categories: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
   },
-  categoryBadgeText: { fontSize: typography.size.xs, color: colors.primaryLight, fontWeight: '500' },
+  categoryBadge: {
+    backgroundColor: colors.primaryMuted,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+  },
+  categoryBadgeText: {
+    fontSize: typography.size.xs,
+    color: colors.primaryLight,
+    fontWeight: "500",
+  },
 
   descSection: { marginBottom: spacing.xl },
-  sectionTitle: { fontSize: typography.size.lg, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.md },
-  description: { fontSize: typography.size.base, color: colors.textSecondary, lineHeight: typography.lineHeight.base },
+  sectionTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: "600",
+    color: colors.textPrimary,
+    marginBottom: spacing.md,
+  },
+  description: {
+    fontSize: typography.size.base,
+    color: colors.textSecondary,
+    lineHeight: typography.lineHeight.base,
+  },
 
-  traitContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  traitContainer: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   traitChip: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-    borderRadius: borderRadius.full, borderWidth: 1, borderColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.primary,
   },
   traitText: { fontSize: typography.size.xs, color: colors.primaryLight },
 
   greetingCard: {
-    backgroundColor: colors.surface, borderRadius: borderRadius.xl,
-    padding: spacing.base, borderWidth: 1, borderColor: colors.cardBorder,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    padding: spacing.base,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
-  greetingText: { fontSize: typography.size.sm, color: colors.textSecondary, lineHeight: typography.lineHeight.sm, fontStyle: 'italic' },
+  greetingText: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+    lineHeight: typography.lineHeight.sm,
+    fontStyle: "italic",
+  },
 
   // Bottom CTA
   bottomCTA: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    paddingHorizontal: spacing.base, paddingBottom: spacing['2xl'], paddingTop: spacing.md,
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing["2xl"],
+    paddingTop: spacing.md,
     backgroundColor: colors.background,
   },
   chatButton: {
-    height: 56, borderRadius: borderRadius.xl,
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.sm,
+    height: 56,
+    borderRadius: borderRadius.xl,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: spacing.sm,
   },
-  chatButtonText: { fontSize: typography.size.md, fontWeight: '600', color: '#fff' },
+  chatButtonText: {
+    fontSize: typography.size.md,
+    fontWeight: "600",
+    color: "#fff",
+  },
 });

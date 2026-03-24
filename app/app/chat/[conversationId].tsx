@@ -9,8 +9,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, typography, spacing, borderRadius } from '../src/theme';
-import { useChatStore } from '../src/stores/chatStore';
+import { colors, typography, spacing, borderRadius } from '../../src/theme';
+import { useChatStore } from '../../src/stores/chatStore';
 import type { Message, Character } from '@ai-companions/shared';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
