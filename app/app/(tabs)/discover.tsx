@@ -1,6 +1,6 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
   Dimensions, RefreshControl, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -14,17 +14,19 @@ import { CATEGORIES } from '@ai-companions/shared';
 import type { Character } from '@ai-companions/shared';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - spacing.base * 3) / 2;
+const COLUMN_GAP = 12;
 
-const FILTER_CHIPS = ['All', 'Category', 'Personality', 'Use Case'] as const;
+const DISCOVER_TAGS = ['All', 'Group Chats', 'MILF', 'Teen', 'Asian', 'Games'];
+
+type CardItem = Character | { id: string; isPromo: true; title: string; subtitle: string; discount: string; image?: any };
 
 export default function DiscoverScreen() {
   const {
     characters, isLoading, isLoadingMore, hasMore, total,
-    fetchCharacters, fetchMore, setFilter, filters, clearFilters,
+    fetchCharacters, fetchMore, setFilter, filters,
   } = useCharacterStore();
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeChip, setActiveChip] = useState<string>('All');
+  const [activeTag, setActiveTag] = useState<string>('All');
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export default function DiscoverScreen() {
   const handleSearch = useCallback(() => {
     setFilter('search', searchQuery.trim() || undefined);
     fetchCharacters(true);
-  }, [searchQuery]);
+  }, [searchQuery, setFilter, fetchCharacters]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -42,57 +44,142 @@ export default function DiscoverScreen() {
     setRefreshing(false);
   };
 
-  const handleCategoryPress = (category: string) => {
-    if (filters.category === category) {
+  const handleTagPress = (tag: string) => {
+    setActiveTag(tag);
+    if (tag === 'All') {
       setFilter('category', undefined);
     } else {
-      setFilter('category', category);
+      setFilter('category', tag);
     }
   };
 
-  const renderCharacterCard = ({ item }: { item: Character }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => router.push(`/character/${item.id}`)}
-      activeOpacity={0.75}
-    >
-      <View style={styles.cardImageContainer}>
-        {item.avatar_url ? (
-          <Image source={{ uri: item.avatar_url }} style={styles.cardImage} />
-        ) : (
+  const masonryData = useMemo(() => {
+    if (!characters.length) return [];
+    
+    const dataWithPromo: CardItem[] = [...characters];
+    
+    if (dataWithPromo.length >= 2) {
+      dataWithPromo.splice(2, 0, {
+        id: 'promo-1',
+        isPromo: true,
+        title: 'OIL OFFSET SALE',
+        subtitle: 'Join Now',
+        discount: '75%',
+      });
+    }
+    return dataWithPromo;
+  }, [characters]);
+
+  const renderCharacterCard = ({ item, index }: { item: CardItem; index: number }) => {
+    const isPromo = 'isPromo' in item;
+    const cardHeight = isPromo ? 340 : (index % 2 === 0 ? 300 : 360);
+
+    if (isPromo) {
+      return (
+        <TouchableOpacity
+          style={[styles.promoCardContainer, { height: cardHeight }]}
+          activeOpacity={0.8}
+        >
           <LinearGradient
-            colors={[colors.primary, colors.accent]}
-            style={styles.cardImage}
+            colors={['#D92F74', '#9B1A54']}
+            style={styles.promoGradient}
           >
-            <Text style={styles.cardInitial}>{item.name[0]}</Text>
+            <Text style={styles.promoDiscountLabel}>{item.discount}</Text>
+            <View style={styles.promoContent}>
+              <Text style={styles.promoTitle}>{item.title}</Text>
+              <View style={styles.promoButton}>
+                <Text style={styles.promoButtonText}>{item.subtitle}</Text>
+              </View>
+            </View>
           </LinearGradient>
-        )}
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={[styles.card, { height: cardHeight }]}
+        onPress={() => router.push(`/character/${item.id}`)}
+        activeOpacity={0.85}
+      >
+        <View style={StyleSheet.absoluteFill}>
+          {item.avatar_url ? (
+             <Image source={{ uri: item.avatar_url }} style={styles.cardImage} contentFit="cover" />
+          ) : (
+            <LinearGradient
+              colors={[colors.surface, '#1A1A2E']}
+              style={styles.cardImage}
+            />
+          )}
+        </View>
+
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.95)']}
+          locations={[0, 0.5, 1]}
+          style={styles.gradientOverlay}
+        />
+
         {item.is_nsfw && (
           <View style={styles.nsfwBadge}>
             <Text style={styles.nsfwText}>18+</Text>
           </View>
         )}
-      </View>
-      <View style={styles.cardInfo}>
-        <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.cardTagline} numberOfLines={2}>{item.tagline || item.description}</Text>
-        <View style={styles.cardStats}>
-          <Ionicons name="chatbubble-outline" size={12} color={colors.textMuted} />
-          <Text style={styles.cardStatText}>{item.chat_count || 0}</Text>
+
+        <View style={styles.cardInfo}>
+          <Text style={styles.cardName} numberOfLines={1}>
+            {item.name} <Text style={styles.cardAge}>{item.age || '18'}</Text>
+          </Text>
+          
+          <Text style={styles.cardTagline} numberOfLines={2}>
+            {item.tagline || item.description || ''}
+          </Text>
+          
+          <View style={styles.cardStatsRow}>
+            <View style={styles.statsGroup}>
+              <Ionicons name="heart" size={12} color="#D92F74" />
+              <Text style={styles.statText}>{item.like_count ? (item.like_count/1000).toFixed(1) + 'k' : '1.5k'}</Text>
+            </View>
+            <View style={styles.statsGroup}>
+              <Ionicons name="chatbubble-ellipses-outline" size={12} color="#A1A1AA" />
+              <Text style={styles.statText}>{item.chat_count ? (item.chat_count/1000000).toFixed(1) + 'M' : '1.7M'}</Text>
+            </View>
+            <Text style={styles.creatorText} numberOfLines={1}>
+              @{item.creator_username || 'bitmaster'}
+            </Text>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
+
+  // Separate data into left and right columns for Masonry layout
+  const { leftColumn, rightColumn } = useMemo(() => {
+    const left: CardItem[] = [];
+    const right: CardItem[] = [];
+    masonryData.forEach((item, index) => {
+      // Put item in shortest column, or alternate
+      if (index % 2 === 0) left.push(item);
+      else right.push(item);
+    });
+    return { leftColumn: left, rightColumn: right };
+  }, [masonryData]);
+
+  const handleScroll = ({ nativeEvent }: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+    const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 500;
+    if (isCloseToBottom && hasMore && !isLoadingMore) {
+      fetchMore();
+    }
+  };
 
   const ListHeader = () => (
-    <View>
-      {/* Search Bar */}
+    <View style={styles.headerContainer}>
       <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color={colors.textMuted} />
+        <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search for AI companions..."
-          placeholderTextColor={colors.textMuted}
+          placeholder="Try 'Busty blonde' or 'Petite asian'"
+          placeholderTextColor="#666"
           value={searchQuery}
           onChangeText={setSearchQuery}
           onSubmitEditing={handleSearch}
@@ -100,176 +187,304 @@ export default function DiscoverScreen() {
         />
         {searchQuery ? (
           <TouchableOpacity onPress={() => { setSearchQuery(''); setFilter('search', undefined); fetchCharacters(true); }}>
-            <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+            <Ionicons name="close-circle" size={18} color="#666" />
           </TouchableOpacity>
         ) : null}
       </View>
 
-      {/* Filter Chips */}
+      <View style={styles.filterRow}>
+        <TouchableOpacity style={styles.filterDropdown}>
+          <Text style={styles.filterDropdownLabel}>Sort: </Text>
+          <Text style={styles.filterDropdownValue}>Popular - Month</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.filterDropdown}>
+           <Text style={styles.filterDropdownLabel}>Gender: </Text>
+           <Text style={styles.filterDropdownValue}>Female</Text>
+           <Ionicons name="chevron-down" size={14} color="#FFF" style={{marginLeft: 4}} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.filterDropdown}>
+           <Text style={styles.filterDropdownLabel}>Style: </Text>
+           <Text style={styles.filterDropdownValue}>Any</Text>
+           <Ionicons name="chevron-down" size={14} color="#FFF" style={{marginLeft: 4}} />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipContainer}
+        contentContainerStyle={styles.tagScrollView}
       >
-        {FILTER_CHIPS.map((chip) => (
+        {DISCOVER_TAGS.map((tag) => (
           <TouchableOpacity
-            key={chip}
-            style={[styles.chip, activeChip === chip && styles.chipActive]}
-            onPress={() => setActiveChip(chip)}
+            key={tag}
+            style={[
+              styles.tagChip, 
+              activeTag === tag ? styles.tagChipActive : styles.tagChipInactive
+            ]}
+            onPress={() => handleTagPress(tag)}
           >
-            <Text style={[styles.chipText, activeChip === chip && styles.chipTextActive]}>{chip}</Text>
+            <Text style={[
+              styles.tagText, 
+              activeTag === tag ? styles.tagTextActive : styles.tagTextInactive
+            ]}>{tag}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
-
-      {/* Categories Grid */}
-      <View style={styles.categoriesSection}>
-        <Text style={styles.sectionTitle}>Categories</Text>
-        <View style={styles.categoriesGrid}>
-          {CATEGORIES.slice(0, 6).map((cat) => (
-            <TouchableOpacity
-              key={cat}
-              style={[
-                styles.categoryCard,
-                filters.category === cat && styles.categoryCardActive,
-              ]}
-              onPress={() => handleCategoryPress(cat)}
-              activeOpacity={0.75}
-            >
-              <LinearGradient
-                colors={
-                  filters.category === cat
-                    ? [colors.primary, colors.accent]
-                    : ['rgba(26,26,46,0.9)', 'rgba(22,33,62,0.9)']
-                }
-                style={styles.categoryGradient}
-              >
-                <Text style={styles.categoryText}>{cat}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Trending Section Header */}
-      <View style={styles.trendingHeader}>
-        <Text style={styles.sectionTitle}>Trending Now</Text>
-        <Text style={styles.resultCount}>{total} companions</Text>
-      </View>
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <FlatList
-        data={characters}
-        keyExtractor={(item) => item.id}
-        renderItem={renderCharacterCard}
-        numColumns={2}
-        columnWrapperStyle={styles.row}
-        ListHeaderComponent={ListHeader}
+      <ScrollView 
+        style={{ flex: 1, paddingHorizontal: spacing.base }}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        onEndReached={() => hasMore && fetchMore()}
-        onEndReachedThreshold={0.3}
+        onScroll={handleScroll}
+        scrollEventThrottle={400}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
-        ListFooterComponent={
-          isLoadingMore ? (
-            <ActivityIndicator color={colors.primary} style={{ paddingVertical: spacing.lg }} />
-          ) : null
-        }
-        ListEmptyComponent={
-          !isLoading ? (
-            <View style={styles.empty}>
-              <Ionicons name="search" size={48} color={colors.textMuted} />
-              <Text style={styles.emptyText}>No companions found</Text>
-              <Text style={styles.emptySubtext}>Try a different search or filter</Text>
+      >
+        <ListHeader />
+        
+        {!isLoading && masonryData.length === 0 ? (
+          <View style={styles.empty}>
+            <Ionicons name="search" size={48} color="#666" />
+            <Text style={styles.emptyText}>No companions found</Text>
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1, marginRight: COLUMN_GAP / 2 }}>
+              {leftColumn.map((item, idx) => renderCharacterCard({ item, index: idx * 2 }))}
             </View>
-          ) : (
-            <ActivityIndicator color={colors.primary} style={{ paddingVertical: spacing['3xl'] }} />
-          )
-        }
-      />
+            <View style={{ flex: 1, marginLeft: COLUMN_GAP / 2 }}>
+              {rightColumn.map((item, idx) => renderCharacterCard({ item, index: idx * 2 + 1 }))}
+            </View>
+          </View>
+        )}
+        
+        {isLoadingMore ? (
+          <ActivityIndicator color={colors.primary} style={{ paddingVertical: spacing.lg }} />
+        ) : null}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  listContent: { paddingBottom: spacing['3xl'] },
-  row: { paddingHorizontal: spacing.base, gap: spacing.base },
+  container: { flex: 1, backgroundColor: '#09090B' },
+  headerContainer: { paddingBottom: spacing.sm },
+  listContent: { paddingBottom: spacing['4xl'] },
 
-  // Search
   searchContainer: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.inputBg, borderRadius: borderRadius.xl,
-    paddingHorizontal: spacing.base, marginHorizontal: spacing.base,
-    marginTop: spacing.base, marginBottom: spacing.lg,
-    borderWidth: 1, borderColor: colors.inputBorder, height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E24',
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#2D2D35',
   },
+  searchIcon: { marginRight: spacing.sm },
   searchInput: {
-    flex: 1, fontSize: typography.size.base, color: colors.textPrimary,
-    marginLeft: spacing.sm,
+    flex: 1, 
+    fontSize: 14, 
+    color: '#FFF', 
   },
 
-  // Chips
-  chipContainer: {
-    paddingHorizontal: spacing.base, gap: spacing.sm,
-    marginBottom: spacing.xl, flexDirection: 'row',
+  filterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+    gap: spacing.xs,
   },
-  chip: {
-    paddingHorizontal: spacing.base, paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full, backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: colors.cardBorder, marginRight: spacing.sm,
+  filterDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1C1C22',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: '500' },
-  chipTextActive: { color: '#fff' },
+  filterDropdownLabel: {
+    color: '#A0A0A0',
+    fontSize: 12,
+  },
+  filterDropdownValue: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 
-  // Categories
-  categoriesSection: { paddingHorizontal: spacing.base, marginBottom: spacing.xl },
-  sectionTitle: { fontSize: typography.size.xl, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.lg },
-  categoriesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  categoryCard: { width: (SCREEN_WIDTH - spacing.base * 2 - spacing.sm) / 2, height: 80, borderRadius: borderRadius.lg, overflow: 'hidden' },
-  categoryCardActive: { borderWidth: 2, borderColor: colors.primary },
-  categoryGradient: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
-    borderRadius: borderRadius.lg,
+  tagScrollView: {
+    marginTop: spacing.lg,
+    paddingBottom: spacing.md,
+    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  categoryText: { fontSize: typography.size.md, fontWeight: '600', color: colors.textPrimary },
-
-  // Trending
-  trendingHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: spacing.base, marginBottom: spacing.lg,
+  tagChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: borderRadius.full,
+    marginRight: 6,
   },
-  resultCount: { fontSize: typography.size.sm, color: colors.textMuted },
+  tagChipActive: {
+    backgroundColor: '#B23A48', 
+  },
+  tagChipInactive: {
+    backgroundColor: 'transparent',
+  },
+  tagText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  tagTextActive: {
+    color: '#FFF',
+  },
+  tagTextInactive: {
+    color: '#888',
+  },
 
-  // Cards
   card: {
-    width: CARD_WIDTH, backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl, overflow: 'hidden',
-    borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.base,
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+    backgroundColor: '#1A1A2E',
+    marginBottom: COLUMN_GAP,
+    marginHorizontal: COLUMN_GAP / 4,
   },
-  cardImageContainer: { width: '100%', height: CARD_WIDTH * 1.1, position: 'relative' },
-  cardImage: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
-  cardInitial: { fontSize: typography.size['4xl'], fontWeight: '700', color: '#fff' },
+  cardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  gradientOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '60%', 
+  },
   nsfwBadge: {
-    position: 'absolute', top: spacing.sm, right: spacing.sm,
-    backgroundColor: 'rgba(239, 68, 68, 0.8)', paddingHorizontal: spacing.sm,
-    paddingVertical: 2, borderRadius: borderRadius.sm,
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: 'rgba(217, 47, 116, 0.9)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
-  nsfwText: { fontSize: typography.size.xs, color: '#fff', fontWeight: '600' },
-  cardInfo: { padding: spacing.md },
-  cardName: { fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary, marginBottom: 4 },
-  cardTagline: { fontSize: typography.size.xs, color: colors.textSecondary, lineHeight: typography.lineHeight.xs, marginBottom: spacing.sm },
-  cardStats: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  cardStatText: { fontSize: typography.size.xs, color: colors.textMuted },
+  nsfwText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  
+  cardInfo: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 12,
+  },
+  cardName: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '900',
+    marginBottom: 2,
+  },
+  cardAge: {
+    color: '#AAA',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  cardTagline: {
+    color: '#DDD',
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 8,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  cardStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  statsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  creatorText: {
+    color: '#888',
+    fontSize: 10,
+    marginLeft: 'auto',
+    flex: 1,
+    textAlign: 'right',
+  },
 
-  // Empty
-  empty: { alignItems: 'center', paddingVertical: spacing['3xl'] },
-  emptyText: { fontSize: typography.size.lg, fontWeight: '600', color: colors.textPrimary, marginTop: spacing.lg },
-  emptySubtext: { fontSize: typography.size.sm, color: colors.textMuted, marginTop: spacing.xs },
+  promoCardContainer: {
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
+    marginBottom: COLUMN_GAP,
+    marginHorizontal: COLUMN_GAP / 4,
+  },
+  promoGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  promoDiscountLabel: {
+    color: '#FFF',
+    fontSize: 56,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    marginBottom: spacing.xs,
+  },
+  promoContent: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  promoTitle: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  promoButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: borderRadius.full,
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    width: '80%',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  promoButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+
+  empty: {
+    alignItems: 'center',
+    paddingTop: 100,
+  },
+  emptyText: {
+    color: '#888',
+    marginTop: 10,
+  },
 });
