@@ -72,7 +72,7 @@ export default function CharacterDetailScreen() {
         <View style={styles.hero}>
           {character.avatar_url || character.banner_url ? (
             <Image
-              source={{ uri: character.banner_url || character.avatar_url }}
+              source={{ uri: (character.banner_url || character.avatar_url) ?? undefined }}
               style={styles.heroImage}
             />
           ) : (
