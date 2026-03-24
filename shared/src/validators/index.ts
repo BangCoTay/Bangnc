@@ -17,6 +17,10 @@ export const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email address'),
 });
 
+export const refreshTokenSchema = z.object({
+  refresh_token: z.string().min(1, 'Refresh token is required'),
+});
+
 // ---- Character Validators ----
 export const createCharacterSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50),

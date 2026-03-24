@@ -1,5 +1,5 @@
 import { api } from './api';
-import * as SecureStore from 'expo-secure-store';
+import { tokenStorage } from './tokenStorage';
 import type { AuthResponse, RegisterRequest, LoginRequest, Profile } from '@ai-companions/shared';
 
 export const authService = {
@@ -18,8 +18,8 @@ export const authService = {
   },
 
   async logout(): Promise<void> {
-    await SecureStore.deleteItemAsync('access_token');
-    await SecureStore.deleteItemAsync('refresh_token');
+    await tokenStorage.removeItem('access_token');
+    await tokenStorage.removeItem('refresh_token');
   },
 
   async forgotPassword(email: string): Promise<void> {
@@ -32,12 +32,12 @@ export const authService = {
   },
 
   async saveTokens(accessToken: string, refreshToken: string): Promise<void> {
-    await SecureStore.setItemAsync('access_token', accessToken);
-    await SecureStore.setItemAsync('refresh_token', refreshToken);
+    await tokenStorage.setItem('access_token', accessToken);
+    await tokenStorage.setItem('refresh_token', refreshToken);
   },
 
   async hasToken(): Promise<boolean> {
-    const token = await SecureStore.getItemAsync('access_token');
+    const token = await tokenStorage.getItem('access_token');
     return !!token;
   },
 };

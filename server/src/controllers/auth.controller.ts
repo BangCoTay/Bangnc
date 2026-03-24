@@ -7,34 +7,38 @@ export class AuthController {
   async register(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { email, password, username, display_name } = req.body;
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const normalizedUsername = String(username).trim().toLowerCase();
 
       // Check username uniqueness
       const { data: existingUser } = await supabaseAdmin
         .from('profiles')
         .select('id')
-        .eq('username', username)
+        .ilike('username', normalizedUsername)
         .single();
 
       if (existingUser) {
-        return res.status(400).json({ success: false, error: 'Username already taken' });
+        return res.status(409).json({ success: false, error: 'Username already taken' });
       }
 
       // Create user in Supabase Auth
       const { data, error } = await supabaseAdmin.auth.admin.createUser({
-        email,
+        email: normalizedEmail,
         password,
         email_confirm: true,
-        user_metadata: { username, display_name: display_name || username },
+        user_metadata: { username: normalizedUsername, display_name: display_name || normalizedUsername },
       });
 
       if (error) {
         logger.error({ error }, 'Registration failed');
-        return res.status(400).json({ success: false, error: error.message });
+        const lowerMsg = error.message.toLowerCase();
+        const status = lowerMsg.includes('already') ? 409 : 400;
+        return res.status(status).json({ success: false, error: error.message });
       }
 
       // Sign in to get tokens
       const { data: session, error: signInError } = await supabasePublic.auth.signInWithPassword({
-        email,
+        email: normalizedEmail,
         password,
       });
 
