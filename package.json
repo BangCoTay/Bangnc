@@ -14,7 +14,9 @@
     "seed": "npm run seed --workspace=server"
   },
   "dependencies": {
+    "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-native-web": "^0.21.0"
+    "react-native-web": "^0.21.0",
+    "react-native-worklets": "0.5.1"
   }
 }
