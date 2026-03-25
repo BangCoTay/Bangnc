@@ -140,3 +140,26 @@ export const AI_MODELS = {
   fast: 'gpt-4o-mini',
   quality: 'gpt-4o',
 } as const;
+
+// ---- Derived Plan Limits (for server-side enforcement) ----
+export const PLAN_LIMITS: Record<string, { daily_messages: number; max_characters: number }> = {
+  free: { daily_messages: 25, max_characters: 3 },
+  starter: { daily_messages: 100, max_characters: 10 },
+  pro: { daily_messages: 500, max_characters: -1 },
+  ultimate: { daily_messages: -1, max_characters: -1 },  // -1 = unlimited
+};
+
+// ---- Generation Costs ----
+export const IMAGE_GEN_COST = 20;  // coins per image
+export const TTS_COST = 5;         // coins per TTS message
+
+// ---- Voice Config ----
+export const VOICE_MODELS = [
+  { value: 'alloy', label: 'Alloy' },
+  { value: 'echo', label: 'Echo' },
+  { value: 'fable', label: 'Fable' },
+  { value: 'onyx', label: 'Onyx' },
+  { value: 'nova', label: 'Nova' },
+  { value: 'shimmer', label: 'Shimmer' },
+] as const;
+

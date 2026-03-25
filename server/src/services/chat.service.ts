@@ -105,7 +105,7 @@ export class ChatService {
 
     const { data, count, error } = await supabaseAdmin
       .from('messages')
-      .select('*', { count: 'exact' })
+      .select('*, character:characters(id, name, avatar_url)', { count: 'exact' })
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
       .range(offset, offset + limit - 1);
@@ -124,7 +124,7 @@ export class ChatService {
   async getRecentMessages(conversationId: string, limit: number = 30): Promise<Message[]> {
     const { data, error } = await supabaseAdmin
       .from('messages')
-      .select('*')
+      .select('*, character:characters(id, name, avatar_url)')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: false })
       .limit(limit);

@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, spacing, borderRadius } from '../src/theme';
 import { useAuthStore } from '../src/stores/authStore';
+import { premiumService } from '../src/services/premium.service';
 import { PLANS } from '@ai-companions/shared';
 
 type PlanKey = keyof typeof PLANS;
@@ -21,6 +22,17 @@ export default function SubscriptionScreen() {
     starter: ['#1a4040', '#0d3333'],
     pro: [colors.primaryDark, '#1a1040'],
     ultimate: ['#4a1942', '#1a0d33'],
+  };
+
+  const handleSubscribe = async (plan: 'starter' | 'pro' | 'ultimate') => {
+    try {
+      if (currentTier === plan) return;
+      const sub = await premiumService.subscribe(plan);
+      useAuthStore.getState().loadProfile(); // refresh user data
+      Alert.alert('Subscription active!', 'Enjoy your new features.');
+    } catch (err: any) {
+      Alert.alert('Error', 'Error mocking purchase: ' + err.message);
+    }
   };
 
   return (
@@ -77,7 +89,11 @@ export default function SubscriptionScreen() {
                 </View>
 
                 {!isCurrentPlan && key !== 'free' && (
-                  <TouchableOpacity style={styles.selectButton} activeOpacity={0.8}>
+                  <TouchableOpacity 
+                    style={styles.selectButton} 
+                    activeOpacity={0.8}
+                    onPress={() => handleSubscribe(key as 'starter'|'pro'|'ultimate')}
+                  >
                     <LinearGradient
                       colors={[colors.ctaGradientStart, colors.ctaGradientEnd]}
                       start={{ x: 0, y: 0 }}

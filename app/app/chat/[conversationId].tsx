@@ -2,67 +2,193 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Dimensions, Keyboard,
+  Dimensions, Keyboard, Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { colors, typography, spacing, borderRadius } from '../../src/theme';
 import { useChatStore } from '../../src/stores/chatStore';
+import { voiceService } from '../../src/services/voice.service';
 import type { Message, Character } from '@ai-companions/shared';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Typing indicator component
-const TypingIndicator = () => {
+// Streaming AI bubble — shows live text with a blinking cursor
+const StreamingBubble = ({ content, character }: { content: string; character?: Character }) => {
+  const [showCursor, setShowCursor] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => setShowCursor((v) => !v), 500);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <View style={styles.typingContainer}>
-      <View style={styles.typingBubble}>
-        <View style={styles.typingDots}>
-          <View style={[styles.dot, { opacity: 0.4 }]} />
-          <View style={[styles.dot, { opacity: 0.7 }]} />
-          <View style={[styles.dot, { opacity: 1 }]} />
-        </View>
+    <View style={styles.messageRow}>
+      <View style={styles.avatarSlot}>
+        {character?.avatar_url ? (
+          <Image source={{ uri: character.avatar_url }} style={styles.messageAvatar} />
+        ) : (
+          <LinearGradient colors={[colors.primary, colors.accent]} style={styles.messageAvatar}>
+            <Text style={styles.messageAvatarText}>{(character?.name || '?')[0]}</Text>
+          </LinearGradient>
+        )}
+      </View>
+      <View style={[styles.bubble, styles.aiBubble]}>
+        <Text style={[styles.messageText, styles.aiMessageText]}>
+          {content}
+          {showCursor && <Text style={styles.cursor}>▊</Text>}
+        </Text>
       </View>
     </View>
   );
 };
 
+// Typing indicator — 3 animated dots
+const TypingIndicator = () => (
+  <View style={styles.typingContainer}>
+    <View style={styles.typingBubble}>
+      <View style={styles.typingDots}>
+        <View style={[styles.dot, { opacity: 0.4 }]} />
+        <View style={[styles.dot, { opacity: 0.7 }]} />
+        <View style={[styles.dot, { opacity: 1 }]} />
+      </View>
+    </View>
+  </View>
+);
+
 export default function ChatScreen() {
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const {
-    activeConversation, messages, isLoading, isSending,
-    loadConversation, sendMessage, regenerateResponse, clearActiveChat,
+    activeConversation, messages, isLoading, isSending, isStreaming, streamingContent,
+    loadConversation, sendStreamingMessage, regenerateResponse, clearActiveChat,
   } = useChatStore();
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
 
-  const character = activeConversation?.character as Character | undefined;
+  // Audio State
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [generatingVoiceId, setGeneratingVoiceId] = useState<string | null>(null);
+
+  const isGroup = activeConversation?.is_group;
+  const mainCharacter = activeConversation?.character as Character | undefined;
 
   useEffect(() => {
     if (conversationId) {
       loadConversation(conversationId);
     }
-    return () => clearActiveChat();
+    return () => {
+      clearActiveChat();
+      if (sound) sound.unloadAsync();
+    };
   }, [conversationId]);
 
-  // Auto-scroll when new messages arrive
+  // Request audio permissions
   useEffect(() => {
-    if (messages.length > 0) {
+    (async () => {
+      await Audio.requestPermissionsAsync();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+    })();
+  }, []);
+
+  // Auto-scroll when new messages arrive or while streaming
+  useEffect(() => {
+    if (messages.length > 0 || isStreaming) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages.length]);
+  }, [messages.length, streamingContent]);
 
-  const handleSend = async () => {
+  const handleSendText = async () => {
     const text = inputText.trim();
-    if (!text || isSending) return;
+    if (!text || isSending || isStreaming) return;
     setInputText('');
     Keyboard.dismiss();
-    await sendMessage(text);
+    await sendStreamingMessage(text);
+  };
+
+  const startRecording = async () => {
+    try {
+      if (sound) await sound.unloadAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      setRecording(recording);
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Failed to start recording', err);
+    }
+  };
+
+  const stopRecording = async () => {
+    try {
+      if (!recording) return;
+      setIsRecording(false);
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecording(null);
+      if (uri) {
+        // Upload audio for speech-to-text
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        const textToInject = await voiceService.speechToText(base64);
+        if (textToInject) setInputText(textToInject);
+      }
+    } catch (err) {
+      console.error('Failed to stop recording', err);
+      setIsRecording(false);
+    }
+  };
+
+  const togglePlayAudio = async (message: Message, voiceId: string = 'nova') => {
+    try {
+      if (playingId === message.id) {
+        // Stop currently playing
+        await sound?.stopAsync();
+        setPlayingId(null);
+        return;
+      }
+      
+      // Stop any existing sound
+      if (sound) await sound.unloadAsync();
+      
+      let finalAudioUrl = message.audio_url;
+
+      // If no audio_url, generate TTS on the fly
+      if (!finalAudioUrl) {
+        setGeneratingVoiceId(message.id);
+        finalAudioUrl = await voiceService.textToSpeech(message.content, voiceId);
+        // Note: In a real app we'd update the message in the backend here to cache it
+      }
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: finalAudioUrl! },
+        { shouldPlay: true }
+      );
+      
+      setSound(newSound);
+      setPlayingId(message.id);
+      setGeneratingVoiceId(null);
+
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setPlayingId(null);
+        }
+      });
+    } catch (err) {
+      Alert.alert('Audio Error', 'Failed to play voice message.');
+      setPlayingId(null);
+      setGeneratingVoiceId(null);
+    }
   };
 
   const formatTime = (dateStr: string) => {
@@ -72,19 +198,25 @@ export default function ChatScreen() {
 
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
     const isUser = item.sender_type === 'user';
-    const showAvatar = !isUser && (index === 0 || messages[index - 1]?.sender_type === 'user');
+    
+    // For group chats, we use the specific character from the joined DB result
+    // Otherwise fallback to main conversation character
+    const msgChar = item.character || mainCharacter;
+    
+    // In groups, show avatar if the sender changes. In 1v1, same logic.
+    const showAvatar = !isUser && (index === 0 || messages[index - 1]?.sender_type !== item.sender_type || messages[index - 1]?.character_id !== item.character_id);
 
     return (
       <View style={[styles.messageRow, isUser && styles.messageRowUser]}>
         {!isUser && (
           <View style={styles.avatarSlot}>
             {showAvatar ? (
-              character?.avatar_url ? (
-                <Image source={{ uri: character.avatar_url }} style={styles.messageAvatar} />
+              msgChar?.avatar_url ? (
+                <Image source={{ uri: msgChar.avatar_url }} style={styles.messageAvatar} />
               ) : (
                 <LinearGradient colors={[colors.primary, colors.accent]} style={styles.messageAvatar}>
                   <Text style={styles.messageAvatarText}>
-                    {(character?.name || '?')[0]}
+                    {(msgChar?.name || '?')[0]}
                   </Text>
                 </LinearGradient>
               )
@@ -92,25 +224,62 @@ export default function ChatScreen() {
           </View>
         )}
 
-        <View style={[styles.bubble, isUser ? styles.userBubble : styles.aiBubble]}>
-          {isUser ? (
-            <LinearGradient
-              colors={[colors.userBubbleGradientStart, colors.userBubbleGradientEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.userBubbleGradient}
-            >
-              <Text style={styles.messageText}>{item.content}</Text>
-            </LinearGradient>
-          ) : (
-            <Text style={[styles.messageText, styles.aiMessageText]}>{item.content}</Text>
+        <View style={isUser ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }}>
+          {isGroup && !isUser && showAvatar && (
+            <Text style={styles.groupSenderName}>{msgChar?.name}</Text>
           )}
-          <Text style={[styles.timestamp, isUser && styles.timestampUser]}>
-            {formatTime(item.created_at)}
-          </Text>
+          <View style={[styles.bubble, isUser ? styles.userBubble : styles.aiBubble]}>
+            {isUser ? (
+              <LinearGradient
+                colors={[colors.userBubbleGradientStart, colors.userBubbleGradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.userBubbleGradient}
+              >
+                <Text style={styles.messageText}>{item.content}</Text>
+              </LinearGradient>
+            ) : (
+              <View>
+                <Text style={[styles.messageText, styles.aiMessageText]}>{item.content}</Text>
+                
+                {/* Voice Play Button for AI */}
+                <TouchableOpacity 
+                  style={styles.voicePlayBtn} 
+                  onPress={() => togglePlayAudio(item, msgChar?.voice_id || 'nova')}
+                >
+                  {generatingVoiceId === item.id ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Ionicons 
+                      name={playingId === item.id ? "stop-circle" : "play-circle"} 
+                      size={24} 
+                      color={colors.primary} 
+                    />
+                  )}
+                  <Text style={styles.voicePlayText}>
+                    {playingId === item.id ? "Stop" : "Play Voice"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            <Text style={[styles.timestamp, isUser && styles.timestampUser]}>
+              {formatTime(item.created_at)}
+            </Text>
+          </View>
         </View>
       </View>
     );
+  };
+
+  // Determine footer component: streaming bubble > typing dots > nothing
+  const ListFooter = () => {
+    if (isStreaming && streamingContent) {
+      return <StreamingBubble content={streamingContent} character={mainCharacter} />;
+    }
+    if (isSending && !isStreaming) {
+      return <TypingIndicator />;
+    }
+    return null;
   };
 
   if (isLoading) {
@@ -130,30 +299,37 @@ export default function ChatScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.headerInfo}
-          onPress={() => character && router.push(`/character/${character.id}`)}
-          activeOpacity={0.7}
+          onPress={() => !isGroup && mainCharacter && router.push(`/character/${mainCharacter.id}`)}
+          activeOpacity={isGroup ? 1 : 0.7}
         >
-          {character?.avatar_url ? (
-            <Image source={{ uri: character.avatar_url }} style={styles.headerAvatar} />
+          {isGroup ? (
+            <View style={[styles.headerAvatar, { backgroundColor: colors.surface }]}>
+              <Ionicons name="people" size={20} color={colors.primary} />
+            </View>
           ) : (
-            <LinearGradient colors={[colors.primary, colors.accent]} style={styles.headerAvatar}>
-              <Text style={styles.headerAvatarText}>
-                {(character?.name || '?')[0]}
-              </Text>
-            </LinearGradient>
+            mainCharacter?.avatar_url ? (
+              <Image source={{ uri: mainCharacter.avatar_url }} style={styles.headerAvatar} />
+            ) : (
+              <LinearGradient colors={[colors.primary, colors.accent]} style={styles.headerAvatar}>
+                <Text style={styles.headerAvatarText}>
+                  {(mainCharacter?.name || '?')[0]}
+                </Text>
+              </LinearGradient>
+            )
           )}
           <View>
-            <Text style={styles.headerName}>{character?.name || 'Character'}</Text>
+            <Text style={styles.headerName}>
+              {isGroup ? 'Group Chat' : mainCharacter?.name || 'Character'}
+            </Text>
             <View style={styles.onlineRow}>
               <View style={styles.onlineDot} />
-              <Text style={styles.onlineText}>Online</Text>
+              <Text style={styles.onlineText}>
+                {isStreaming ? 'Typing...' : 'Online'}
+              </Text>
             </View>
           </View>
         </TouchableOpacity>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.headerActionBtn}>
-            <Ionicons name="share-outline" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
           <TouchableOpacity style={styles.headerActionBtn}>
             <Ionicons name="ellipsis-horizontal" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
@@ -174,33 +350,26 @@ export default function ChatScreen() {
           contentContainerStyle={styles.messageList}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-          ListFooterComponent={isSending ? <TypingIndicator /> : null}
+          ListFooterComponent={<ListFooter />}
         />
-
-        {/* Quick Replies */}
-        {messages.length <= 2 && character?.personality?.interests && (
-          <View style={styles.quickReplies}>
-            {['Tell me about yourself', 'What can we do together?', 'Let\'s roleplay!'].map((text) => (
-              <TouchableOpacity
-                key={text}
-                style={styles.quickReplyChip}
-                onPress={() => { setInputText(text); }}
-              >
-                <Text style={styles.quickReplyText}>{text}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
 
         {/* Input */}
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.inputAction}>
-            <Ionicons name="add-circle-outline" size={26} color={colors.textMuted} />
+          <TouchableOpacity 
+            style={styles.inputAction}
+            onPressIn={startRecording}
+            onPressOut={stopRecording}
+          >
+            <Ionicons 
+              name={isRecording ? "mic" : "mic-outline"} 
+              size={26} 
+              color={isRecording ? colors.error : colors.textMuted} 
+            />
           </TouchableOpacity>
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.textInput}
-              placeholder={`Message ${character?.name || 'AI'}...`}
+              placeholder={isRecording ? "Recording..." : `Message ${isGroup ? 'Group' : mainCharacter?.name || 'AI'}...`}
               placeholderTextColor={colors.textMuted}
               value={inputText}
               onChangeText={setInputText}
@@ -210,8 +379,8 @@ export default function ChatScreen() {
           </View>
           <TouchableOpacity
             style={[styles.sendButton, inputText.trim() ? styles.sendButtonActive : null]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || isSending}
+            onPress={handleSendText}
+            disabled={!inputText.trim() || isSending || isStreaming}
           >
             <Ionicons
               name="send"
@@ -263,6 +432,11 @@ const styles = StyleSheet.create({
   },
   messageAvatarText: { fontSize: typography.size.sm, fontWeight: '600', color: '#fff' },
 
+  groupSenderName: {
+    fontSize: typography.size.xs, color: colors.textSecondary,
+    marginBottom: 4, marginLeft: 4, fontWeight: '500',
+  },
+
   bubble: { maxWidth: SCREEN_WIDTH * 0.75, borderRadius: borderRadius.xl },
   userBubble: { borderBottomRightRadius: borderRadius.sm },
   userBubbleGradient: {
@@ -276,11 +450,19 @@ const styles = StyleSheet.create({
   },
   messageText: { fontSize: typography.size.base, color: '#fff', lineHeight: typography.lineHeight.base },
   aiMessageText: { color: colors.textPrimary },
+  cursor: { color: colors.primary, fontSize: typography.size.base },
   timestamp: {
     fontSize: typography.size.xs, color: 'rgba(255,255,255,0.5)',
     marginTop: spacing.xs, alignSelf: 'flex-end',
   },
   timestampUser: { color: 'rgba(255,255,255,0.6)' },
+
+  voicePlayBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: spacing.sm, paddingTop: spacing.sm,
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  voicePlayText: { fontSize: typography.size.xs, color: colors.primary, fontWeight: '600' },
 
   // Typing indicator
   typingContainer: { paddingHorizontal: spacing.sm, marginBottom: spacing.sm },
@@ -294,18 +476,6 @@ const styles = StyleSheet.create({
   dot: {
     width: 8, height: 8, borderRadius: 4, backgroundColor: colors.textMuted,
   },
-
-  // Quick Replies
-  quickReplies: {
-    flexDirection: 'row', paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm, gap: spacing.sm, flexWrap: 'wrap',
-  },
-  quickReplyChip: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full, borderWidth: 1, borderColor: colors.primaryMuted,
-    backgroundColor: colors.surface,
-  },
-  quickReplyText: { fontSize: typography.size.sm, color: colors.textSecondary },
 
   // Input
   inputContainer: {

@@ -4,8 +4,13 @@ import { View, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography } from '../../src/theme';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuthStore } from '../../src/stores/authStore';
+import { usePushNotifications } from '../../src/services/notifications';
 
 export default function TabLayout() {
+  const user = useAuthStore(s => s.user);
+  usePushNotifications(user?.id);
+
   return (
     <Tabs
       screenOptions={{

@@ -44,6 +44,7 @@ export interface Character {
   updated_at: string;
   // Virtual fields
   is_favorited?: boolean;
+  voice_id?: string;
 }
 
 export type CharacterStyle = 'anime' | 'realistic' | 'cartoon' | '3d' | 'pixel';
@@ -79,6 +80,7 @@ export interface Conversation {
   message_count: number;
   memory_summary: string | null;
   memory_facts: MemoryFact[];
+  is_group: boolean;
   created_at: string;
   updated_at: string;
   // Joined data
@@ -97,8 +99,10 @@ export interface Message {
   conversation_id: string;
   sender_type: SenderType;
   character_id: string | null;
+  character?: Pick<Character, 'id' | 'name' | 'avatar_url'>;
   content: string;
   media_url: string | null;
+  audio_url: string | null;
   token_count: number;
   created_at: string;
 }

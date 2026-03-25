@@ -10,6 +10,10 @@ import authRoutes from './routes/auth.routes';
 import characterRoutes from './routes/character.routes';
 import chatRoutes from './routes/chat.routes';
 import userRoutes from './routes/user.routes';
+import premiumRoutes from './routes/premium.routes';
+import groupRoutes from './routes/group.routes';
+import voiceRoutes from './routes/voice.routes';
+import notificationRoutes from './routes/notification.routes';
 
 validateEnv();
 
@@ -30,6 +34,10 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/characters', characterRoutes);
 app.use('/api/v1/chat', chatRoutes);
 app.use('/api/v1/user', userRoutes);
+app.use('/api/v1/premium', premiumRoutes);
+app.use('/api/v1/groups', groupRoutes);
+app.use('/api/v1/voice', voiceRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 
 // 404 handler
 app.use((_req, res) => {
