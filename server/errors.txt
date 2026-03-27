@@ -1,0 +1,12 @@
+
+> @ai-companions/server@1.0.0 build
+> tsc
+
+src/services/generation.service.ts(53,24): error TS18048: 'response.data' is possibly 'undefined'.
+npm error Lifecycle script `build` failed with error:
+npm error code 2
+npm error path D:\Coding Projects\AI_Girlfriend\server
+npm error workspace @ai-companions/server@1.0.0
+npm error location D:\Coding Projects\AI_Girlfriend\server
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c tsc

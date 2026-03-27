@@ -67,7 +67,7 @@ export default function GenerateScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>AI Image Studio</Text>
-        <TouchableOpacity onPress={() => router.push('/coins')}>
+        <TouchableOpacity onPress={() => router.push('/coins' as any)}>
           <Ionicons name="sparkles" size={22} color="#F59E0B" />
         </TouchableOpacity>
       </View>

@@ -56,7 +56,7 @@ export const chatService = {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Stream request failed' }));
-      throw new Error(errorData.error || `HTTP ${response.status}`);
+      throw new Error((errorData as any).error || `HTTP ${response.status}`);
     }
 
     const reader = response.body?.getReader();

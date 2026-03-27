@@ -139,7 +139,7 @@ export default function ChatScreen() {
       setRecording(null);
       if (uri) {
         // Upload audio for speech-to-text
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
         const textToInject = await voiceService.speechToText(base64);
         if (textToInject) setInputText(textToInject);
       }
@@ -245,7 +245,7 @@ export default function ChatScreen() {
                 {/* Voice Play Button for AI */}
                 <TouchableOpacity 
                   style={styles.voicePlayBtn} 
-                  onPress={() => togglePlayAudio(item, msgChar?.voice_id || 'nova')}
+                  onPress={() => togglePlayAudio(item, (msgChar as any)?.voice_id || 'nova')}
                 >
                   {generatingVoiceId === item.id ? (
                     <ActivityIndicator size="small" color={colors.primary} />
