@@ -4,6 +4,7 @@ import { env, validateEnv } from './config/env';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { generalLimiter } from './middleware/rateLimit';
+import { initializeStorage } from './utils/storage';
 
 // Routes
 import authRoutes from './routes/auth.routes';
@@ -14,6 +15,7 @@ import premiumRoutes from './routes/premium.routes';
 import groupRoutes from './routes/group.routes';
 import voiceRoutes from './routes/voice.routes';
 import notificationRoutes from './routes/notification.routes';
+import adminRoutes from './routes/admin.routes';
 
 validateEnv();
 
@@ -38,6 +40,7 @@ app.use('/api/v1/premium', premiumRoutes);
 app.use('/api/v1/groups', groupRoutes);
 app.use('/api/v1/voice', voiceRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 // 404 handler
 app.use((_req: express.Request, res: express.Response) => {
@@ -48,9 +51,12 @@ app.use((_req: express.Request, res: express.Response) => {
 app.use(errorHandler);
 
 // Start server
-app.listen(env.PORT, () => {
+app.listen(env.PORT, async () => {
   logger.info(`🚀 AI Companions server running on port ${env.PORT}`);
   logger.info(`📡 Environment: ${env.NODE_ENV}`);
+  
+  // Initialize storage buckets
+  await initializeStorage();
 });
 
 export default app;

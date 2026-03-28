@@ -11,6 +11,9 @@ import { colors, typography, spacing, borderRadius } from '../../src/theme';
 import { characterService } from '../../src/services/character.service';
 import { CATEGORIES, PERSONALITY_TRAITS, COMMUNICATION_STYLES, SPEAKING_TONES, CHARACTER_STYLES, CHARACTER_GENDERS } from '@ai-companions/shared';
 import type { CreateCharacterRequest } from '@ai-companions/shared';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadService } from '../../src/services/upload.service';
+import { Image } from 'expo-image';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -25,23 +28,31 @@ export default function CreateCharacterScreen() {
     name: '',
     tagline: '',
     description: '',
+    avatar_url: '',
     style: 'anime',
     gender: 'female',
     categories: [],
     is_nsfw: false,
+    system_prompt: '',
+    greeting_message: '',
     personality: {
       traits: [],
       interests: [],
       communication_style: COMMUNICATION_STYLES[0],
       speaking_tone: SPEAKING_TONES[0],
+      backstory: '',
+      quirks: [],
+      likes: [],
+      dislikes: [],
     },
     appearance: {
       hair_color: '',
       eye_color: '',
       body_type: '',
       outfit: '',
+      distinguishing_features: '',
+      age_appearance: '',
     },
-    greeting_message: '',
   });
 
   const updateForm = (key: keyof CreateCharacterRequest, value: any) => {
@@ -108,6 +119,27 @@ export default function CreateCharacterScreen() {
     }
   };
 
+  const handlePickAvatar = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setLoading(true);
+      try {
+        const url = await uploadService.uploadImage(result.assets[0].uri, 'avatars');
+        updateForm('avatar_url', url);
+      } catch (err: any) {
+        Alert.alert('Upload Error', err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const StepIndicator = () => (
     <View style={styles.stepIndicator}>
       {[1, 2, 3].map((s) => (
@@ -136,6 +168,20 @@ export default function CreateCharacterScreen() {
         {step === 1 && (
           <View style={styles.stepContent}>
             <Text style={styles.sectionTitle}>Basic Info</Text>
+
+            <View style={styles.avatarPickerContainer}>
+              <TouchableOpacity onPress={handlePickAvatar} style={styles.avatarPlaceholder} disabled={loading}>
+                {form.avatar_url ? (
+                  <Image source={{ uri: form.avatar_url }} style={styles.avatarImage} contentFit="cover" />
+                ) : (
+                  <Ionicons name="camera" size={32} color={colors.textMuted} />
+                )}
+                <View style={styles.avatarEditBadge}>
+                  <Ionicons name="pencil" size={14} color="#fff" />
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.subLabel}>Tap to upload avatar</Text>
+            </View>
             
             <Text style={styles.label}>Name *</Text>
             <TextInput
@@ -257,6 +303,17 @@ export default function CreateCharacterScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+
+            <Text style={styles.label}>Backstory</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={form.personality?.backstory}
+              onChangeText={t => updateNested('personality', 'backstory', t)}
+              placeholder="What made them who they are today?"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              numberOfLines={4}
+            />
           </View>
         )}
 
@@ -291,6 +348,33 @@ export default function CreateCharacterScreen() {
               placeholderTextColor={colors.textMuted}
             />
 
+            <Text style={styles.label}>Body Type</Text>
+            <TextInput
+              style={styles.input}
+              value={form.appearance?.body_type}
+              onChangeText={t => updateNested('appearance', 'body_type', t)}
+              placeholder="e.g. Slender and athletic"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={styles.label}>Distinguishing Features</Text>
+            <TextInput
+              style={styles.input}
+              value={form.appearance?.distinguishing_features}
+              onChangeText={t => updateNested('appearance', 'distinguishing_features', t)}
+              placeholder="e.g. A glowing scar over her eye"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={styles.label}>Age Appearance</Text>
+            <TextInput
+              style={styles.input}
+              value={form.appearance?.age_appearance}
+              onChangeText={t => updateNested('appearance', 'age_appearance', t)}
+              placeholder="e.g. 24"
+              placeholderTextColor={colors.textMuted}
+            />
+
             <Text style={[styles.sectionTitle, { marginTop: spacing['2xl'] }]}>Greeting Message</Text>
             <Text style={styles.subLabel}>This is the first message they say to you.</Text>
             <TextInput
@@ -301,6 +385,17 @@ export default function CreateCharacterScreen() {
               placeholderTextColor={colors.textMuted}
               multiline
               numberOfLines={3}
+            />
+
+            <Text style={[styles.sectionTitle, { marginTop: spacing['2xl'] }]}>System Prompt</Text>
+            <Text style={styles.subLabel}>Optional: override or extend rules for the LLM to follow when acting as this character.</Text>
+            <TextInput
+              style={[styles.input, styles.textArea, { minHeight: 120 }]}
+              value={form.system_prompt}
+              onChangeText={t => updateForm('system_prompt', t)}
+              placeholder="Roleplay instructions (e.g. You must never break character...)"
+              placeholderTextColor={colors.textMuted}
+              multiline
             />
 
             <TouchableOpacity style={styles.nsfwToggle} onPress={() => updateForm('is_nsfw', !form.is_nsfw)}>
@@ -403,6 +498,24 @@ const styles = StyleSheet.create({
   fullChipActive: { backgroundColor: colors.primaryMuted, borderColor: colors.primary },
   fullChipText: { fontSize: typography.size.sm, color: colors.textSecondary },
   fullChipTextActive: { color: colors.primaryLight, fontWeight: '600' },
+
+  avatarPickerContainer: {
+    alignItems: 'center', marginBottom: spacing.xl,
+  },
+  avatarPlaceholder: {
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.cardBorder,
+    justifyContent: 'center', alignItems: 'center', marginBottom: spacing.sm,
+  },
+  avatarImage: {
+    width: '100%', height: '100%', borderRadius: 50,
+  },
+  avatarEditBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    backgroundColor: colors.primary, width: 28, height: 28,
+    borderRadius: 14, justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2, borderColor: colors.background,
+  },
 
   nsfwToggle: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,

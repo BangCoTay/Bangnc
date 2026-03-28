@@ -144,7 +144,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isStreaming: true,
       streamingContent: '',
     }));
-
     try {
       await chatService.streamMessage(
         state.activeConversation.id,
@@ -177,14 +176,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
         },
       );
-    } catch {
-      // Fallback: remove temp message and clear streaming
-      set((s) => ({
-        messages: s.messages.filter((m) => m.id !== tempUserMsg.id),
-        streamingContent: '',
-        isStreaming: false,
-        isSending: false,
-      }));
+    } catch (err: any) {
+      console.error('sendStreamingMessage error:', err);
+      // Fallback: only remove temp message if we haven't received the real one yet
+      set((s) => {
+        const hasRealMsg = s.messages.some((m) => m.content === content && m.sender_type === 'user' && m.id !== tempUserMsg.id);
+        return {
+          messages: hasRealMsg ? s.messages : s.messages.filter((m) => m.id !== tempUserMsg.id),
+          streamingContent: '',
+          isStreaming: false,
+          isSending: false,
+        };
+      });
     }
   },
 

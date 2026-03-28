@@ -1,51 +1,84 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
-  FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Dimensions, Keyboard, Alert, Modal, ScrollView, Pressable,
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  Dimensions,
+  Keyboard,
+  Alert,
+  Modal,
+  ScrollView,
+  Pressable,
   Animated as RNAnimated,
-} from 'react-native';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
-import * as Clipboard from 'expo-clipboard';
-import { colors, typography, spacing, borderRadius } from '../../src/theme';
-import { useChatStore } from '../../src/stores/chatStore';
-import { voiceService } from '../../src/services/voice.service';
-import { GIFTS, RARITY_COLORS } from '@ai-companions/shared';
-import type { Message, Character, GiftDefinition } from '@ai-companions/shared';
+} from "react-native";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
+import { router, useLocalSearchParams } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  useAudioRecorder,
+  RecordingPresets,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+} from "expo-audio";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Clipboard from "expo-clipboard";
+import { colors, typography, spacing, borderRadius } from "../../src/theme";
+import { useChatStore } from "../../src/stores/chatStore";
+import { voiceService } from "../../src/services/voice.service";
+import { GIFTS, RARITY_COLORS } from "@ai-companions/shared";
+import type { Message, Character, GiftDefinition } from "@ai-companions/shared";
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 // ─── Helper: parse gift info from media_url ───
 const parseGift = (mediaUrl: string | null): GiftDefinition | null => {
-  if (!mediaUrl?.startsWith('gift:')) return null;
+  if (!mediaUrl?.startsWith("gift:")) return null;
   const giftId = mediaUrl.slice(5);
-  return GIFTS.find(g => g.id === giftId) || null;
+  return GIFTS.find((g) => g.id === giftId) || null;
 };
 
 // ─── Affinity Bar ───
 const AffinityBar = ({ messageCount }: { messageCount: number }) => {
   const level = Math.floor(messageCount / 20) + 1;
   const progress = (messageCount % 20) / 20;
-  const levelName = level <= 2 ? 'Stranger' : level <= 5 ? 'Friend' : level <= 10 ? 'Close Friend' : level <= 20 ? 'Soulmate' : 'Eternal Bond';
+  const levelName =
+    level <= 2
+      ? "Stranger"
+      : level <= 5
+        ? "Friend"
+        : level <= 10
+          ? "Close Friend"
+          : level <= 20
+            ? "Soulmate"
+            : "Eternal Bond";
 
   return (
     <View style={affinityStyles.container}>
       <View style={affinityStyles.row}>
         <Ionicons name="heart" size={12} color={colors.accentPink} />
-        <Text style={affinityStyles.label}>Lv.{level} {levelName}</Text>
+        <Text style={affinityStyles.label}>
+          Lv.{level} {levelName}
+        </Text>
       </View>
       <View style={affinityStyles.barBg}>
         <LinearGradient
           colors={[colors.accentPink, colors.primary]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
-          style={[affinityStyles.barFill, { width: `${Math.max(5, progress * 100)}%` }]}
+          style={[
+            affinityStyles.barFill,
+            { width: `${Math.max(5, progress * 100)}%` },
+          ]}
         />
       </View>
     </View>
@@ -67,15 +100,25 @@ const GiftPickerModal = ({
   const [selectedGift, setSelectedGift] = useState<GiftDefinition | null>(null);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
       <Pressable style={giftStyles.overlay} onPress={onClose}>
         <Pressable style={giftStyles.sheet} onPress={() => {}}>
           <View style={giftStyles.handle} />
           <Text style={giftStyles.title}>Send a Gift</Text>
-          <Text style={giftStyles.subtitle}>Show your appreciation with a virtual gift</Text>
+          <Text style={giftStyles.subtitle}>
+            Show your appreciation with a virtual gift
+          </Text>
 
           <View style={giftStyles.gridContainer}>
-            <ScrollView style={giftStyles.grid} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={giftStyles.grid}
+              showsVerticalScrollIndicator={false}
+            >
               <View style={giftStyles.gridInner}>
                 {GIFTS.map((gift) => {
                   const isSelected = selectedGift?.id === gift.id;
@@ -85,20 +128,40 @@ const GiftPickerModal = ({
                       key={gift.id}
                       style={[
                         giftStyles.giftCard,
-                        isSelected && { borderColor: rarityColor, borderWidth: 2 },
+                        isSelected && {
+                          borderColor: rarityColor,
+                          borderWidth: 2,
+                        },
                       ]}
                       onPress={() => setSelectedGift(gift)}
                       activeOpacity={0.7}
                     >
-                      <View style={[giftStyles.iconCircle, { borderColor: rarityColor }]}>
-                        <Ionicons name={gift.icon as any} size={28} color={rarityColor} />
+                      <View
+                        style={[
+                          giftStyles.iconCircle,
+                          { borderColor: rarityColor },
+                        ]}
+                      >
+                        <Ionicons
+                          name={gift.icon as any}
+                          size={28}
+                          color={rarityColor}
+                        />
                       </View>
-                      <Text style={giftStyles.giftName} numberOfLines={1}>{gift.name}</Text>
+                      <Text style={giftStyles.giftName} numberOfLines={1}>
+                        {gift.name}
+                      </Text>
                       <View style={giftStyles.costRow}>
-                        <Ionicons name="flash" size={12} color={colors.accentGold} />
+                        <Ionicons
+                          name="flash"
+                          size={12}
+                          color={colors.accentGold}
+                        />
                         <Text style={giftStyles.costText}>{gift.cost}</Text>
                       </View>
-                      <Text style={[giftStyles.rarityBadge, { color: rarityColor }]}>
+                      <Text
+                        style={[giftStyles.rarityBadge, { color: rarityColor }]}
+                      >
                         {gift.rarity.toUpperCase()}
                       </Text>
                     </TouchableOpacity>
@@ -111,15 +174,24 @@ const GiftPickerModal = ({
           {selectedGift && (
             <View style={giftStyles.footer}>
               <View style={giftStyles.footerInfo}>
-                <Ionicons name={selectedGift.icon as any} size={24} color={RARITY_COLORS[selectedGift.rarity]} />
+                <Ionicons
+                  name={selectedGift.icon as any}
+                  size={24}
+                  color={RARITY_COLORS[selectedGift.rarity]}
+                />
                 <View style={{ marginLeft: spacing.sm, flex: 1 }}>
                   <Text style={giftStyles.footerName}>{selectedGift.name}</Text>
-                  <Text style={giftStyles.footerAffinity}>+{selectedGift.affinity} affinity</Text>
+                  <Text style={giftStyles.footerAffinity}>
+                    +{selectedGift.affinity} affinity
+                  </Text>
                 </View>
               </View>
               <TouchableOpacity
                 style={giftStyles.sendBtn}
-                onPress={() => { onSend(selectedGift); setSelectedGift(null); }}
+                onPress={() => {
+                  onSend(selectedGift);
+                  setSelectedGift(null);
+                }}
                 disabled={isSending}
               >
                 {isSending ? (
@@ -127,7 +199,9 @@ const GiftPickerModal = ({
                 ) : (
                   <>
                     <Ionicons name="flash" size={16} color="#fff" />
-                    <Text style={giftStyles.sendBtnText}>{selectedGift.cost} Send</Text>
+                    <Text style={giftStyles.sendBtnText}>
+                      {selectedGift.cost} Send
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -140,15 +214,25 @@ const GiftPickerModal = ({
 };
 
 // ─── Gift Bubble (special rendering for gift messages) ───
-const GiftBubble = ({ gift, content, timestamp }: { gift: GiftDefinition; content: string; timestamp: string }) => {
+const GiftBubble = ({
+  gift,
+  content,
+  timestamp,
+}: {
+  gift: GiftDefinition;
+  content: string;
+  timestamp: string;
+}) => {
   const rarityColor = RARITY_COLORS[gift.rarity];
   return (
     <View style={giftBubbleStyles.wrapper}>
       <LinearGradient
-        colors={['rgba(124,58,237,0.15)', 'rgba(236,72,153,0.15)']}
+        colors={["rgba(124,58,237,0.15)", "rgba(236,72,153,0.15)"]}
         style={giftBubbleStyles.container}
       >
-        <View style={[giftBubbleStyles.iconCircle, { borderColor: rarityColor }]}>
+        <View
+          style={[giftBubbleStyles.iconCircle, { borderColor: rarityColor }]}
+        >
           <Ionicons name={gift.icon as any} size={32} color={rarityColor} />
         </View>
         <Text style={giftBubbleStyles.giftName}>{gift.name}</Text>
@@ -182,24 +266,49 @@ const MessageActionSheet = ({
 }) => {
   if (!message) return null;
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
       <Pressable style={actionStyles.overlay} onPress={onClose}>
         <View style={actionStyles.sheet}>
           <TouchableOpacity style={actionStyles.option} onPress={onCopy}>
-            <Ionicons name="copy-outline" size={20} color={colors.textPrimary} />
+            <Ionicons
+              name="copy-outline"
+              size={20}
+              color={colors.textPrimary}
+            />
             <Text style={actionStyles.optionText}>Copy Text</Text>
           </TouchableOpacity>
           {isLastAI && (
-            <TouchableOpacity style={actionStyles.option} onPress={onRegenerate}>
-              <Ionicons name="refresh-outline" size={20} color={colors.primary} />
-              <Text style={[actionStyles.optionText, { color: colors.primary }]}>Regenerate</Text>
+            <TouchableOpacity
+              style={actionStyles.option}
+              onPress={onRegenerate}
+            >
+              <Ionicons
+                name="refresh-outline"
+                size={20}
+                color={colors.primary}
+              />
+              <Text
+                style={[actionStyles.optionText, { color: colors.primary }]}
+              >
+                Regenerate
+              </Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={actionStyles.option} onPress={onDelete}>
             <Ionicons name="trash-outline" size={20} color={colors.error} />
-            <Text style={[actionStyles.optionText, { color: colors.error }]}>Delete</Text>
+            <Text style={[actionStyles.optionText, { color: colors.error }]}>
+              Delete
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[actionStyles.option, actionStyles.cancel]} onPress={onClose}>
+          <TouchableOpacity
+            style={[actionStyles.option, actionStyles.cancel]}
+            onPress={onClose}
+          >
             <Text style={actionStyles.cancelText}>Cancel</Text>
           </TouchableOpacity>
         </View>
@@ -209,7 +318,13 @@ const MessageActionSheet = ({
 };
 
 // ─── Streaming AI bubble ───
-const StreamingBubble = ({ content, character }: { content: string; character?: Character }) => {
+const StreamingBubble = ({
+  content,
+  character,
+}: {
+  content: string;
+  character?: Character;
+}) => {
   const [showCursor, setShowCursor] = useState(true);
 
   useEffect(() => {
@@ -221,10 +336,18 @@ const StreamingBubble = ({ content, character }: { content: string; character?: 
     <View style={styles.messageRow}>
       <View style={styles.avatarSlot}>
         {character?.avatar_url ? (
-          <Image source={{ uri: character.avatar_url }} style={styles.messageAvatar} />
+          <Image
+            source={{ uri: character.avatar_url }}
+            style={styles.messageAvatar}
+          />
         ) : (
-          <LinearGradient colors={[colors.primary, colors.accent]} style={styles.messageAvatar}>
-            <Text style={styles.messageAvatarText}>{(character?.name || '?')[0]}</Text>
+          <LinearGradient
+            colors={[colors.primary, colors.accent]}
+            style={styles.messageAvatar}
+          >
+            <Text style={styles.messageAvatarText}>
+              {(character?.name || "?")[0]}
+            </Text>
           </LinearGradient>
         )}
       </View>
@@ -251,23 +374,179 @@ const TypingIndicator = () => (
   </View>
 );
 
+// ─── Individual Message Item (Memoized) ───
+const MessageItem = React.memo(
+  ({
+    item,
+    index,
+    mainCharacter,
+    messages,
+    playingId,
+    generatingVoiceId,
+    onLongPress,
+    onTogglePlay,
+  }: {
+    item: Message;
+    index: number;
+    mainCharacter?: Character;
+    messages: Message[];
+    playingId: string | null;
+    generatingVoiceId: string | null;
+    onLongPress: (m: Message) => void;
+    onTogglePlay: (m: Message, voiceId?: string) => void;
+  }) => {
+    const isUser = item.sender_type === "user";
+    const msgChar = item.character || mainCharacter;
+    const showAvatar =
+      !isUser &&
+      (index === 0 ||
+        messages[index - 1]?.sender_type !== item.sender_type ||
+        messages[index - 1]?.character_id !== item.character_id);
+
+    // Check if this is a gift message
+    const gift = parseGift(item.media_url);
+    if (gift && isUser) {
+      const formatTime = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      };
+      return (
+        <GiftBubble
+          gift={gift}
+          content={item.content}
+          timestamp={formatTime(item.created_at)}
+        />
+      );
+    }
+
+    return (
+      <View style={[styles.messageRow, isUser ? styles.messageRowUser : null]}>
+        {!isUser && (
+          <View style={styles.avatarSlot}>
+            {showAvatar &&
+              (msgChar?.avatar_url ? (
+                <Image
+                  source={{ uri: msgChar.avatar_url }}
+                  style={styles.messageAvatar}
+                />
+              ) : (
+                <LinearGradient
+                  colors={[colors.primary, colors.accent]}
+                  style={styles.messageAvatar}
+                >
+                  <Text style={styles.messageAvatarText}>
+                    {(msgChar?.name || "?")[0]}
+                  </Text>
+                </LinearGradient>
+              ))}
+          </View>
+        )}
+
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onLongPress={() => onLongPress(item)}
+          style={[styles.bubble, isUser ? styles.userBubble : styles.aiBubble]}
+        >
+          {isUser ? (
+            <LinearGradient
+              colors={[colors.primary, colors.accent]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.userBubbleGradient}
+            >
+              <Text style={styles.messageText}>{item.content}</Text>
+              <Text style={[styles.timestamp, styles.timestampUser]}>
+                {new Date(item.created_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Text>
+            </LinearGradient>
+          ) : (
+            <>
+              {showAvatar &&
+                messages[0]?.conversation_id?.includes("group") && (
+                  <Text style={styles.groupSenderName}>{msgChar?.name}</Text>
+                )}
+              <Text style={[styles.messageText, styles.aiMessageText]}>
+                {item.content}
+              </Text>
+
+              {/* Voice controls for AI messages */}
+              {!isUser && (
+                <TouchableOpacity
+                  style={styles.voicePlayBtn}
+                  onPress={() => onTogglePlay(item, msgChar?.voice_id)}
+                  disabled={generatingVoiceId === item.id}
+                >
+                  {generatingVoiceId === item.id ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Ionicons
+                      name={
+                        playingId === item.id ? "pause-circle" : "play-circle"
+                      }
+                      size={20}
+                      color={colors.primary}
+                    />
+                  )}
+                  <Text style={styles.voicePlayText}>
+                    {generatingVoiceId === item.id
+                      ? "Generating..."
+                      : playingId === item.id
+                        ? "Stop"
+                        : "Play Voice"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <Text style={[styles.timestamp, { color: colors.textMuted }]}>
+                {new Date(item.created_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  },
+);
+
 export default function ChatScreen() {
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const {
-    activeConversation, messages, isLoading, isSending, isStreaming, streamingContent,
+    activeConversation,
+    messages,
+    isLoading,
+    isSending,
+    isStreaming,
+    streamingContent,
     isSendingGift,
-    loadConversation, sendStreamingMessage, regenerateResponse, clearActiveChat,
-    sendGift, deleteMessage,
+    loadConversation,
+    sendStreamingMessage,
+    regenerateResponse,
+    clearActiveChat,
+    sendGift,
+    deleteMessage,
   } = useChatStore();
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState("");
   const flatListRef = useRef<FlatList>(null);
 
-  // Audio State
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  // Audio State (expo-audio)
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [generatingVoiceId, setGeneratingVoiceId] = useState<string | null>(null);
+  const [playingUrl, setPlayingUrl] = useState<string | null>(null);
+  const audioPlayer = useAudioPlayer(playingUrl ? { uri: playingUrl } : null);
+  const playerStatus = useAudioPlayerStatus(audioPlayer);
+  const [generatingVoiceId, setGeneratingVoiceId] = useState<string | null>(
+    null,
+  );
 
   // Gift & Action State
   const [showGiftPicker, setShowGiftPicker] = useState(false);
@@ -283,34 +562,58 @@ export default function ChatScreen() {
     }
     return () => {
       clearActiveChat();
-      if (sound) sound.unloadAsync();
     };
   }, [conversationId]);
 
-  // Request audio permissions
+  // Request audio permissions for recording
   useEffect(() => {
-    (async () => {
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-    })();
+    requestRecordingPermissionsAsync();
+    setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
   }, []);
+
+  // Auto-clear playing state when audio finishes
+  useEffect(() => {
+    if (playerStatus.didJustFinish) {
+      setPlayingId(null);
+      setPlayingUrl(null);
+    }
+  }, [playerStatus.didJustFinish]);
+
+  // Handle auto-playback when target URL is set
+  useEffect(() => {
+    if (playingUrl && audioPlayer) {
+      // Small delay ensures the player has correctly loaded the new source
+      const timer = setTimeout(() => {
+        audioPlayer.play();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [playingUrl]);
 
   // Auto-scroll when new messages arrive or while streaming
   useEffect(() => {
-    if (messages.length > 0 || isStreaming) {
-      setTimeout(() => {
+    if (messages.length > 0) {
+      const timer = setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
+      return () => clearTimeout(timer);
     }
-  }, [messages.length, streamingContent]);
+  }, [messages.length, isStreaming]);
+
+  // Handle auto-scroll only on actual stream text changes if needed, but not too aggressive
+  useEffect(() => {
+    if (
+      isStreaming &&
+      (streamingContent.length % 5 === 0 || streamingContent.length < 20)
+    ) {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }
+  }, [streamingContent.length, isStreaming]);
 
   const handleSendText = async () => {
     const text = inputText.trim();
     if (!text || isSending || isStreaming) return;
-    setInputText('');
+    setInputText("");
     Keyboard.dismiss();
     await sendStreamingMessage(text);
   };
@@ -323,8 +626,9 @@ export default function ChatScreen() {
         // Could show a toast with new balance
       }
     } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || 'Failed to send gift';
-      Alert.alert('Gift Error', msg);
+      const msg =
+        err?.response?.data?.error || err?.message || "Failed to send gift";
+      Alert.alert("Gift Error", msg);
     }
   };
 
@@ -343,18 +647,22 @@ export default function ChatScreen() {
 
   const handleDeleteMessage = useCallback(() => {
     if (!actionMessage) return;
-    Alert.alert('Delete Message', 'Are you sure you want to delete this message?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          deleteMessage(actionMessage.id);
-          setShowActions(false);
-          setActionMessage(null);
+    Alert.alert(
+      "Delete Message",
+      "Are you sure you want to delete this message?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            deleteMessage(actionMessage.id);
+            setShowActions(false);
+            setActionMessage(null);
+          },
         },
-      },
-    ]);
+      ],
+    );
   }, [actionMessage]);
 
   const handleRegenerate = useCallback(() => {
@@ -365,178 +673,119 @@ export default function ChatScreen() {
 
   const startRecording = async () => {
     try {
-      if (sound) await sound.unloadAsync();
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      setRecording(recording);
+      // Stop any active playback first
+      if (playingId) {
+        audioPlayer.pause();
+        setPlayingId(null);
+        setPlayingUrl(null);
+      }
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
       setIsRecording(true);
     } catch (err) {
-      console.error('Failed to start recording', err);
+      console.error("Failed to start recording", err);
     }
   };
 
   const stopRecording = async () => {
     try {
-      if (!recording) return;
+      if (!isRecording) return;
       setIsRecording(false);
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(null);
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
       if (uri) {
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-        const textToInject = await voiceService.speechToText(base64);
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const textToInject = await voiceService.speechToText(
+          base64,
+          "audio/mp4",
+        );
         if (textToInject) setInputText(textToInject);
       }
     } catch (err) {
-      console.error('Failed to stop recording', err);
+      console.error("Failed to stop recording", err);
       setIsRecording(false);
     }
   };
 
-  const togglePlayAudio = async (message: Message, voiceId: string = 'nova') => {
+  const togglePlayAudio = async (
+    message: Message,
+    voiceId: string = "nova",
+  ) => {
     try {
+      // If already playing this message, stop it
       if (playingId === message.id) {
-        await sound?.stopAsync();
+        audioPlayer.pause();
         setPlayingId(null);
+        setPlayingUrl(null);
         return;
       }
-      if (sound) await sound.unloadAsync();
 
       let finalAudioUrl = message.audio_url;
 
       if (!finalAudioUrl) {
         setGeneratingVoiceId(message.id);
-        finalAudioUrl = await voiceService.textToSpeech(message.content, voiceId);
+        try {
+          finalAudioUrl = await voiceService.textToSpeech(
+            message.content,
+            voiceId,
+          );
+        } finally {
+          setGeneratingVoiceId(null);
+        }
       }
 
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: finalAudioUrl! },
-        { shouldPlay: true }
-      );
-
-      setSound(newSound);
+      // Set the URL — the playback effect will handle starting the audio
+      setPlayingUrl(finalAudioUrl!);
       setPlayingId(message.id);
-      setGeneratingVoiceId(null);
-
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          setPlayingId(null);
-        }
-      });
     } catch (err) {
-      Alert.alert('Audio Error', 'Failed to play voice message.');
+      Alert.alert("Audio Error", "Failed to play voice message.");
       setPlayingId(null);
+      setPlayingUrl(null);
       setGeneratingVoiceId(null);
     }
   };
+  const lastAIMessageId = [...messages]
+    .reverse()
+    .find((m) => m.sender_type === "character")?.id;
 
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+  const renderMessage = useCallback(
+    ({ item, index }: { item: Message; index: number }) => (
+      <MessageItem
+        item={item}
+        index={index}
+        mainCharacter={mainCharacter}
+        messages={messages}
+        playingId={playingId}
+        generatingVoiceId={generatingVoiceId}
+        onLongPress={handleMessageLongPress}
+        onTogglePlay={togglePlayAudio}
+      />
+    ),
+    [
+      messages,
+      mainCharacter,
+      playingId,
+      generatingVoiceId,
+      handleMessageLongPress,
+      togglePlayAudio,
+    ],
+  );
 
-  const lastAIMessageId = [...messages].reverse().find(m => m.sender_type === 'character')?.id;
-
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-    const isUser = item.sender_type === 'user';
-    const msgChar = item.character || mainCharacter;
-    const showAvatar = !isUser && (index === 0 || messages[index - 1]?.sender_type !== item.sender_type || messages[index - 1]?.character_id !== item.character_id);
-
-    // Check if this is a gift message
-    const gift = parseGift(item.media_url);
-    if (gift && isUser) {
-      return (
-        <Pressable onLongPress={() => handleMessageLongPress(item)}>
-          <GiftBubble gift={gift} content={item.content} timestamp={formatTime(item.created_at)} />
-        </Pressable>
-      );
-    }
-
-    // Check if this message has an image (non-gift media_url)
-    const hasImage = item.media_url && !item.media_url.startsWith('gift:');
-
-    return (
-      <Pressable onLongPress={() => handleMessageLongPress(item)} style={[styles.messageRow, isUser && styles.messageRowUser]}>
-        {!isUser && (
-          <View style={styles.avatarSlot}>
-            {showAvatar ? (
-              msgChar?.avatar_url ? (
-                <Image source={{ uri: msgChar.avatar_url }} style={styles.messageAvatar} />
-              ) : (
-                <LinearGradient colors={[colors.primary, colors.accent]} style={styles.messageAvatar}>
-                  <Text style={styles.messageAvatarText}>
-                    {(msgChar?.name || '?')[0]}
-                  </Text>
-                </LinearGradient>
-              )
-            ) : null}
-          </View>
-        )}
-
-        <View style={isUser ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }}>
-          {isGroup && !isUser && showAvatar && (
-            <Text style={styles.groupSenderName}>{msgChar?.name}</Text>
-          )}
-          <View style={[styles.bubble, isUser ? styles.userBubble : styles.aiBubble]}>
-            {isUser ? (
-              <LinearGradient
-                colors={[colors.userBubbleGradientStart, colors.userBubbleGradientEnd]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.userBubbleGradient}
-              >
-                <Text style={styles.messageText}>{item.content}</Text>
-              </LinearGradient>
-            ) : (
-              <View>
-                {hasImage && (
-                  <Image
-                    source={{ uri: item.media_url! }}
-                    style={styles.mediaImage}
-                    contentFit="cover"
-                  />
-                )}
-                <Text style={[styles.messageText, styles.aiMessageText]}>{item.content}</Text>
-
-                {/* Voice Play Button for AI */}
-                <TouchableOpacity
-                  style={styles.voicePlayBtn}
-                  onPress={() => togglePlayAudio(item, (msgChar as any)?.voice_id || 'nova')}
-                >
-                  {generatingVoiceId === item.id ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <Ionicons
-                      name={playingId === item.id ? "stop-circle" : "play-circle"}
-                      size={24}
-                      color={colors.primary}
-                    />
-                  )}
-                  <Text style={styles.voicePlayText}>
-                    {playingId === item.id ? "Stop" : "Play Voice"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            <Text style={[styles.timestamp, isUser && styles.timestampUser]}>
-              {formatTime(item.created_at)}
-            </Text>
-          </View>
-        </View>
-      </Pressable>
-    );
-  };
-
-  // Footer: streaming bubble > typing dots > nothing
-  const ListFooter = () => {
+  // Memoized footer — must NOT be defined as an inline component in JSX
+  // otherwise FlatList remounts on every render causing messages to disappear
+  const renderListFooter = useCallback(() => {
     if (isStreaming && streamingContent) {
-      return <StreamingBubble content={streamingContent} character={mainCharacter} />;
+      return (
+        <StreamingBubble content={streamingContent} character={mainCharacter} />
+      );
     }
     if ((isSending && !isStreaming) || isSendingGift) {
       return <TypingIndicator />;
     }
     return null;
-  };
+  }, [isStreaming, streamingContent, isSending, isSendingGift, mainCharacter]);
 
   if (isLoading) {
     return (
@@ -547,7 +796,7 @@ export default function ChatScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       {/* Chat Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -555,43 +804,63 @@ export default function ChatScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.headerInfo}
-          onPress={() => !isGroup && mainCharacter && router.push(`/character/${mainCharacter.id}`)}
+          onPress={() =>
+            !isGroup &&
+            mainCharacter &&
+            router.push(`/character/${mainCharacter.id}`)
+          }
           activeOpacity={isGroup ? 1 : 0.7}
         >
           {isGroup ? (
-            <View style={[styles.headerAvatar, { backgroundColor: colors.surface }]}>
+            <View
+              style={[styles.headerAvatar, { backgroundColor: colors.surface }]}
+            >
               <Ionicons name="people" size={20} color={colors.primary} />
             </View>
+          ) : mainCharacter?.avatar_url ? (
+            <Image
+              source={{ uri: mainCharacter.avatar_url }}
+              style={styles.headerAvatar}
+            />
           ) : (
-            mainCharacter?.avatar_url ? (
-              <Image source={{ uri: mainCharacter.avatar_url }} style={styles.headerAvatar} />
-            ) : (
-              <LinearGradient colors={[colors.primary, colors.accent]} style={styles.headerAvatar}>
-                <Text style={styles.headerAvatarText}>
-                  {(mainCharacter?.name || '?')[0]}
-                </Text>
-              </LinearGradient>
-            )
+            <LinearGradient
+              colors={[colors.primary, colors.accent]}
+              style={styles.headerAvatar}
+            >
+              <Text style={styles.headerAvatarText}>
+                {(mainCharacter?.name || "?")[0]}
+              </Text>
+            </LinearGradient>
           )}
           <View style={{ flex: 1 }}>
             <Text style={styles.headerName}>
-              {isGroup ? 'Group Chat' : mainCharacter?.name || 'Character'}
+              {isGroup ? "Group Chat" : mainCharacter?.name || "Character"}
             </Text>
             <View style={styles.onlineRow}>
               <View style={styles.onlineDot} />
               <Text style={styles.onlineText}>
-                {isStreaming ? 'Typing...' : isSendingGift ? 'Reacting...' : 'Online'}
+                {isStreaming
+                  ? "Typing..."
+                  : isSendingGift
+                    ? "Reacting..."
+                    : "Online"}
               </Text>
             </View>
             {/* Affinity Bar */}
             {!isGroup && activeConversation && (
-              <AffinityBar messageCount={activeConversation.message_count || 0} />
+              <AffinityBar
+                messageCount={activeConversation.message_count || 0}
+              />
             )}
           </View>
         </TouchableOpacity>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.headerActionBtn}>
-            <Ionicons name="ellipsis-horizontal" size={22} color={colors.textPrimary} />
+            <Ionicons
+              name="ellipsis-horizontal"
+              size={22}
+              color={colors.textPrimary}
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -599,18 +868,30 @@ export default function ChatScreen() {
       {/* Messages */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <FlatList
           ref={flatListRef}
           data={messages}
+          extraData={{ isStreaming, streamingContent, isSending }}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-          ListFooterComponent={<ListFooter />}
+          onContentSizeChange={() => {
+            if (isStreaming || isSending) {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }
+          }}
+          ListFooterComponent={renderListFooter}
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+          }}
+          initialNumToRender={20}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          keyboardShouldPersistTaps="handled"
         />
 
         {/* Input */}
@@ -635,7 +916,11 @@ export default function ChatScreen() {
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.textInput}
-              placeholder={isRecording ? "Recording..." : `Message ${isGroup ? 'Group' : mainCharacter?.name || 'AI'}...`}
+              placeholder={
+                isRecording
+                  ? "Recording..."
+                  : `Message ${isGroup ? "Group" : mainCharacter?.name || "AI"}...`
+              }
               placeholderTextColor={colors.textMuted}
               value={inputText}
               onChangeText={setInputText}
@@ -644,14 +929,17 @@ export default function ChatScreen() {
             />
           </View>
           <TouchableOpacity
-            style={[styles.sendButton, inputText.trim() ? styles.sendButtonActive : null]}
+            style={[
+              styles.sendButton,
+              inputText.trim() ? styles.sendButtonActive : null,
+            ]}
             onPress={handleSendText}
             disabled={!inputText.trim() || isSending || isStreaming}
           >
             <Ionicons
               name="send"
               size={20}
-              color={inputText.trim() ? '#fff' : colors.textMuted}
+              color={inputText.trim() ? "#fff" : colors.textMuted}
             />
           </TouchableOpacity>
         </View>
@@ -670,7 +958,10 @@ export default function ChatScreen() {
         visible={showActions}
         message={actionMessage}
         isLastAI={actionMessage?.id === lastAIMessageId}
-        onClose={() => { setShowActions(false); setActionMessage(null); }}
+        onClose={() => {
+          setShowActions(false);
+          setActionMessage(null);
+        }}
         onCopy={handleCopyMessage}
         onDelete={handleDeleteMessage}
         onRegenerate={handleRegenerate}
@@ -685,66 +976,123 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  loadingContainer: { flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 
   // Header
   header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.sm, paddingVertical: spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: colors.divider,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
   },
   backBtn: { padding: spacing.sm },
-  headerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: spacing.xs },
-  headerAvatar: {
-    width: 40, height: 40, borderRadius: 20,
-    justifyContent: 'center', alignItems: 'center', marginRight: spacing.sm,
+  headerInfo: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: spacing.xs,
   },
-  headerAvatarText: { fontSize: typography.size.base, fontWeight: '700', color: '#fff' },
-  headerName: { fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
-  onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
-  onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.online },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: spacing.sm,
+  },
+  headerAvatarText: {
+    fontSize: typography.size.base,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  headerName: {
+    fontSize: typography.size.base,
+    fontWeight: "600",
+    color: colors.textPrimary,
+  },
+  onlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 1,
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.online,
+  },
   onlineText: { fontSize: typography.size.xs, color: colors.online },
-  headerActions: { flexDirection: 'row' },
+  headerActions: { flexDirection: "row" },
   headerActionBtn: { padding: spacing.sm },
 
   // Messages
   messageList: { paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
   messageRow: {
-    flexDirection: 'row', marginBottom: spacing.md,
+    flexDirection: "row",
+    marginBottom: spacing.md,
     paddingHorizontal: spacing.xs,
   },
-  messageRowUser: { justifyContent: 'flex-end' },
+  messageRowUser: { justifyContent: "flex-end" },
   avatarSlot: { width: 36, marginRight: spacing.sm },
   messageAvatar: {
-    width: 32, height: 32, borderRadius: 16,
-    justifyContent: 'center', alignItems: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  messageAvatarText: { fontSize: typography.size.sm, fontWeight: '600', color: '#fff' },
+  messageAvatarText: {
+    fontSize: typography.size.sm,
+    fontWeight: "600",
+    color: "#fff",
+  },
 
   groupSenderName: {
-    fontSize: typography.size.xs, color: colors.textSecondary,
-    marginBottom: 4, marginLeft: 4, fontWeight: '500',
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginBottom: 4,
+    marginLeft: 4,
+    fontWeight: "500",
   },
 
   bubble: { maxWidth: SCREEN_WIDTH * 0.75, borderRadius: borderRadius.xl },
   userBubble: { borderBottomRightRadius: borderRadius.sm },
   userBubbleGradient: {
-    paddingHorizontal: spacing.base, paddingVertical: spacing.md,
-    borderRadius: borderRadius.xl, borderBottomRightRadius: borderRadius.sm,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.xl,
+    borderBottomRightRadius: borderRadius.sm,
   },
   aiBubble: {
-    backgroundColor: colors.aiBubble, borderBottomLeftRadius: borderRadius.sm,
-    paddingHorizontal: spacing.base, paddingVertical: spacing.md,
-    borderWidth: 1, borderColor: colors.aiBubbleBorder,
+    backgroundColor: colors.aiBubble,
+    borderBottomLeftRadius: borderRadius.sm,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.aiBubbleBorder,
   },
-  messageText: { fontSize: typography.size.base, color: '#fff', lineHeight: typography.lineHeight.base },
+  messageText: {
+    fontSize: typography.size.base,
+    color: "#fff",
+    lineHeight: typography.lineHeight.base,
+  },
   aiMessageText: { color: colors.textPrimary },
   cursor: { color: colors.primary, fontSize: typography.size.base },
   timestamp: {
-    fontSize: typography.size.xs, color: 'rgba(255,255,255,0.5)',
-    marginTop: spacing.xs, alignSelf: 'flex-end',
+    fontSize: typography.size.xs,
+    color: "rgba(255,255,255,0.5)",
+    marginTop: spacing.xs,
+    alignSelf: "flex-end",
   },
-  timestampUser: { color: 'rgba(255,255,255,0.6)' },
+  timestampUser: { color: "rgba(255,255,255,0.6)" },
 
   mediaImage: {
     width: SCREEN_WIDTH * 0.6,
@@ -754,47 +1102,74 @@ const styles = StyleSheet.create({
   },
 
   voicePlayBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    marginTop: spacing.sm, paddingTop: spacing.sm,
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)',
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.1)",
   },
-  voicePlayText: { fontSize: typography.size.xs, color: colors.primary, fontWeight: '600' },
+  voicePlayText: {
+    fontSize: typography.size.xs,
+    color: colors.primary,
+    fontWeight: "600",
+  },
 
   // Typing indicator
   typingContainer: { paddingHorizontal: spacing.sm, marginBottom: spacing.sm },
   typingBubble: {
-    backgroundColor: colors.aiBubble, borderRadius: borderRadius.xl,
-    borderBottomLeftRadius: borderRadius.sm, paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md, alignSelf: 'flex-start', marginLeft: 44,
-    borderWidth: 1, borderColor: colors.aiBubbleBorder,
+    backgroundColor: colors.aiBubble,
+    borderRadius: borderRadius.xl,
+    borderBottomLeftRadius: borderRadius.sm,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    alignSelf: "flex-start",
+    marginLeft: 44,
+    borderWidth: 1,
+    borderColor: colors.aiBubbleBorder,
   },
-  typingDots: { flexDirection: 'row', gap: 4 },
+  typingDots: { flexDirection: "row", gap: 4 },
   dot: {
-    width: 8, height: 8, borderRadius: 4, backgroundColor: colors.textMuted,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.textMuted,
   },
 
   // Input
   inputContainer: {
-    flexDirection: 'row', alignItems: 'flex-end',
-    paddingHorizontal: spacing.sm, paddingVertical: spacing.sm,
-    borderTopWidth: 1, borderTopColor: colors.divider,
-    paddingBottom: Platform.OS === 'ios' ? spacing.sm : spacing.sm,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    paddingBottom: Platform.OS === "ios" ? spacing.sm : spacing.sm,
   },
   inputAction: { padding: spacing.xs, marginBottom: 4 },
   inputWrapper: {
-    flex: 1, backgroundColor: colors.inputBg,
-    borderRadius: borderRadius.xl, paddingHorizontal: spacing.base,
-    borderWidth: 1, borderColor: colors.inputBorder,
-    maxHeight: 120, marginHorizontal: spacing.xs,
+    flex: 1,
+    backgroundColor: colors.inputBg,
+    borderRadius: borderRadius.xl,
+    paddingHorizontal: spacing.base,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    maxHeight: 120,
+    marginHorizontal: spacing.xs,
   },
   textInput: {
-    fontSize: typography.size.base, color: colors.textPrimary,
-    paddingVertical: Platform.OS === 'ios' ? spacing.md : spacing.sm,
+    fontSize: typography.size.base,
+    color: colors.textPrimary,
+    paddingVertical: Platform.OS === "ios" ? spacing.md : spacing.sm,
     maxHeight: 100,
   },
   sendButton: {
-    width: 40, height: 40, borderRadius: 20,
-    justifyContent: 'center', alignItems: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
   },
   sendButtonActive: { backgroundColor: colors.primary },
 });
@@ -802,40 +1177,55 @@ const styles = StyleSheet.create({
 // ─── Affinity Styles ───
 const affinityStyles = StyleSheet.create({
   container: { marginTop: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
-  label: { fontSize: 10, color: colors.accentPink, fontWeight: '600' },
+  row: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 2 },
+  label: { fontSize: 10, color: colors.accentPink, fontWeight: "600" },
   barBg: {
-    height: 3, backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 2, overflow: 'hidden', width: 100,
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 2,
+    overflow: "hidden",
+    width: 100,
   },
-  barFill: { height: '100%', borderRadius: 2 },
+  barFill: { height: "100%", borderRadius: 2 },
 });
 
 // ─── Gift Picker Styles ───
 const giftStyles = StyleSheet.create({
   overlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
   },
   sheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingTop: spacing.sm, paddingHorizontal: spacing.base,
-    paddingBottom: Platform.OS === 'ios' ? spacing.xl : spacing.lg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.base,
+    paddingBottom: Platform.OS === "ios" ? spacing.xl : spacing.lg,
     height: SCREEN_WIDTH > 400 ? 550 : 480,
-    maxHeight: '85%',
+    maxHeight: "85%",
   },
   handle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: colors.textMuted, alignSelf: 'center', marginBottom: spacing.md,
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.textMuted,
+    alignSelf: "center",
+    marginBottom: spacing.md,
   },
   title: {
-    fontSize: typography.size.xl, fontWeight: '700',
-    color: colors.textPrimary, textAlign: 'center',
+    fontSize: typography.size.xl,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    textAlign: "center",
   },
   subtitle: {
-    fontSize: typography.size.sm, color: colors.textSecondary,
-    textAlign: 'center', marginTop: 4, marginBottom: spacing.md,
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: spacing.md,
   },
   gridContainer: {
     flex: 1,
@@ -845,9 +1235,9 @@ const giftStyles = StyleSheet.create({
     flex: 1,
   },
   gridInner: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
     gap: spacing.sm,
     paddingBottom: spacing.md,
   },
@@ -856,87 +1246,145 @@ const giftStyles = StyleSheet.create({
     backgroundColor: colors.background,
     borderRadius: borderRadius.lg,
     padding: spacing.sm,
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 1,
     borderColor: colors.divider,
     marginBottom: spacing.xs,
   },
   iconCircle: {
-    width: 48, height: 48, borderRadius: 24,
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: 'rgba(124,58,237,0.1)', borderWidth: 1,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(124,58,237,0.1)",
+    borderWidth: 1,
     marginBottom: 6,
   },
   giftName: {
-    fontSize: 10, color: colors.textPrimary, fontWeight: '600',
-    textAlign: 'center', marginBottom: 2,
+    fontSize: 10,
+    color: colors.textPrimary,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 2,
   },
-  costRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  costText: { fontSize: 10, color: colors.accentGold, fontWeight: '700' },
-  rarityBadge: { fontSize: 8, fontWeight: '800', marginTop: 2 },
+  costRow: { flexDirection: "row", alignItems: "center", gap: 2 },
+  costText: { fontSize: 10, color: colors.accentGold, fontWeight: "700" },
+  rarityBadge: { fontSize: 8, fontWeight: "800", marginTop: 2 },
   footer: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
     marginTop: spacing.sm,
   },
-  footerInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  footerName: { fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
+  footerInfo: { flexDirection: "row", alignItems: "center", flex: 1 },
+  footerName: {
+    fontSize: typography.size.base,
+    fontWeight: "600",
+    color: colors.textPrimary,
+  },
   footerAffinity: { fontSize: typography.size.xs, color: colors.accentPink },
   sendBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: colors.primary, paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm, borderRadius: borderRadius.xl,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.xl,
   },
-  sendBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.size.sm },
+  sendBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: typography.size.sm,
+  },
 });
 
 // ─── Gift Bubble Styles ───
 const giftBubbleStyles = StyleSheet.create({
   wrapper: {
-    alignItems: 'center', marginBottom: spacing.md,
+    alignItems: "center",
+    marginBottom: spacing.md,
     paddingHorizontal: spacing.xl,
   },
   container: {
-    borderRadius: borderRadius.xl, padding: spacing.base,
-    alignItems: 'center', borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.2)', width: SCREEN_WIDTH * 0.6,
+    borderRadius: borderRadius.xl,
+    padding: spacing.base,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(124,58,237,0.2)",
+    width: SCREEN_WIDTH * 0.6,
   },
   iconCircle: {
-    width: 56, height: 56, borderRadius: 28,
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 2,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 2,
     marginBottom: spacing.sm,
   },
   giftName: {
-    fontSize: typography.size.lg, fontWeight: '700',
-    color: colors.textPrimary, marginBottom: 2,
+    fontSize: typography.size.lg,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginBottom: 2,
   },
-  action: { fontSize: typography.size.sm, color: colors.textSecondary, fontStyle: 'italic' },
-  rarity: { fontSize: 10, fontWeight: '800', marginTop: 6, letterSpacing: 1 },
+  action: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+    fontStyle: "italic",
+  },
+  rarity: { fontSize: 10, fontWeight: "800", marginTop: 6, letterSpacing: 1 },
   timestamp: {
-    fontSize: typography.size.xs, color: 'rgba(255,255,255,0.4)', marginTop: 4,
+    fontSize: typography.size.xs,
+    color: "rgba(255,255,255,0.4)",
+    marginTop: 4,
   },
 });
 
 // ─── Message Action Styles ───
 const actionStyles = StyleSheet.create({
   overlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center', alignItems: 'center', padding: spacing.xl,
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: spacing.xl,
   },
   sheet: {
-    backgroundColor: colors.surface, borderRadius: borderRadius.xl,
-    width: '100%', maxWidth: 300, overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    width: "100%",
+    maxWidth: 300,
+    overflow: "hidden",
   },
   option: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    paddingVertical: spacing.md, paddingHorizontal: spacing.base,
-    borderBottomWidth: 1, borderBottomColor: colors.divider,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
   },
-  optionText: { fontSize: typography.size.base, color: colors.textPrimary, fontWeight: '500' },
+  optionText: {
+    fontSize: typography.size.base,
+    color: colors.textPrimary,
+    fontWeight: "500",
+  },
   cancel: {
-    justifyContent: 'center', borderBottomWidth: 0,
+    justifyContent: "center",
+    borderBottomWidth: 0,
   },
-  cancelText: { fontSize: typography.size.base, color: colors.textMuted, fontWeight: '500', textAlign: 'center' },
+  cancelText: {
+    fontSize: typography.size.base,
+    color: colors.textMuted,
+    fontWeight: "500",
+    textAlign: "center",
+  },
 });

@@ -53,6 +53,10 @@ export class AuthController {
         .eq('id', data.user.id)
         .single();
 
+      if (profile) {
+        profile.is_admin = normalizedEmail === 'vankhai15052005@gmail.com';
+      }
+
       res.status(201).json({
         success: true,
         data: {
@@ -84,6 +88,10 @@ export class AuthController {
         .select('*')
         .eq('id', session.user.id)
         .single();
+
+      if (profile) {
+        profile.is_admin = String(email).trim().toLowerCase() === 'vankhai15052005@gmail.com';
+      }
 
       res.json({
         success: true,

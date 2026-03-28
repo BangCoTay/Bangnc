@@ -17,17 +17,9 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 async function seed() {
   console.log('🌱 Seeding database...\n');
 
-  // Check if characters already exist
-  const { count } = await supabase
-    .from('characters')
-    .select('*', { count: 'exact', head: true })
-    .eq('is_official', true);
-
-  if (count && count > 0) {
-    console.log(`⚠️  ${count} official characters already exist. Skipping seed.`);
-    console.log('   To re-seed, delete existing official characters first.');
-    return;
-  }
+  // Delete existing official characters to ensure clean update
+  await supabase.from('characters').delete().eq('is_official', true);
+  console.log('🧹 Deleted existing official characters for a fresh seed.');
 
   let success = 0;
   let failed = 0;

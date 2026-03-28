@@ -152,6 +152,20 @@ export default function HomeScreen() {
               onPress={() => router.push(`/character/${character.id}`)}
               activeOpacity={0.8}
             >
+              <View style={StyleSheet.absoluteFill}>
+                {character.avatar_url ? (
+                  <Image
+                    source={{ uri: character.avatar_url }}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <LinearGradient
+                    colors={[colors.surface, "#1A1A2E"]}
+                    style={StyleSheet.absoluteFill}
+                  />
+                )}
+              </View>
               <LinearGradient
                 colors={['transparent', 'rgba(0,0,0,0.85)']}
                 style={styles.featuredOverlay}

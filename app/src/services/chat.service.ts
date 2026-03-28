@@ -45,65 +45,70 @@ export const chatService = {
     const token = await tokenStorage.getItem('access_token');
     const url = `${API_BASE}/chat/conversations/${conversationId}/stream`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ content }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Stream request failed' }));
-      throw new Error((errorData as any).error || `HTTP ${response.status}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // Parse SSE events from buffer
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      
+      let lastProcessedIndex = 0;
+      let buffer = '';
       let currentEvent = '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7).trim();
-        } else if (line.startsWith('data: ') && currentEvent) {
-          const data = line.slice(6);
-          try {
-            const parsed = JSON.parse(data);
-            switch (currentEvent) {
-              case 'user_message':
-                callbacks.onUserMessage(parsed);
-                break;
-              case 'token':
-                callbacks.onToken(parsed.content);
-                break;
-              case 'done':
-                callbacks.onDone(parsed);
-                break;
-              case 'error':
-                callbacks.onError(parsed.error);
-                break;
+
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === 3 || xhr.readyState === 4) {
+          const newData = xhr.responseText.slice(lastProcessedIndex);
+          lastProcessedIndex = xhr.responseText.length;
+          buffer += newData;
+
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) {
+              currentEvent = '';
+              continue;
             }
-          } catch {}
-          currentEvent = '';
-        } else if (line === '') {
-          currentEvent = '';
+
+            if (trimmed.startsWith('event: ')) {
+              currentEvent = trimmed.slice(7).trim();
+            } else if (trimmed.startsWith('data: ')) {
+              if (!currentEvent) continue;
+              const rawData = trimmed.slice(6).trim();
+              try {
+                const data = JSON.parse(rawData);
+                switch (currentEvent) {
+                  case 'user_message': callbacks.onUserMessage(data); break;
+                  case 'token': callbacks.onToken(data.content); break;
+                  case 'done': callbacks.onDone(data); break;
+                  case 'error': callbacks.onError(data.error); break;
+                }
+              } catch (e) {
+                // Ignore chunked JSON fragments
+              }
+            }
+          }
         }
-      }
-    }
+
+        if (xhr.readyState === 4) {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            const error = xhr.responseText || `HTTP ${xhr.status}`;
+            callbacks.onError(error);
+            reject(new Error(error));
+          }
+        }
+      };
+
+      xhr.onerror = () => {
+        callbacks.onError('Network request failed');
+        reject(new Error('Network request failed'));
+      };
+
+      xhr.send(JSON.stringify({ content }));
+    });
   },
 
   async regenerate(conversationId: string): Promise<{ ai_message: Message }> {

@@ -22,7 +22,11 @@ export default function LoginScreen() {
     }
     try {
       await login(email.trim(), password);
-      router.replace('/(tabs)');
+      if (email.trim().toLowerCase() === 'vankhai15052005@gmail.com') {
+        router.replace('/(admin)');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (err: any) {
       Alert.alert('Login Failed', err.message);
     }
