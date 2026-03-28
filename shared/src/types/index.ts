@@ -99,7 +99,7 @@ export interface Message {
   conversation_id: string;
   sender_type: SenderType;
   character_id: string | null;
-  character?: Pick<Character, 'id' | 'name' | 'avatar_url'>;
+  character?: Pick<Character, 'id' | 'name' | 'avatar_url' | 'voice_id'>;
   content: string;
   media_url: string | null;
   audio_url: string | null;
