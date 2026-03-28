@@ -1,4 +1,4 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { characterService } from '../services/character.service';
 

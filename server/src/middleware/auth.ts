@@ -2,12 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../config/supabase';
 import { UnauthorizedError } from '../utils/errors';
 
-export interface AuthRequest extends Request {
+export type AuthRequest = Request & {
   user?: {
     id: string;
     email: string;
   };
-}
+};
 
 export async function authMiddleware(req: AuthRequest, _res: Response, next: NextFunction) {
   try {

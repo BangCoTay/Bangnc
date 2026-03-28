@@ -1,4 +1,4 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { supabasePublic, supabaseAdmin } from '../config/supabase';
 import { logger } from '../utils/logger';

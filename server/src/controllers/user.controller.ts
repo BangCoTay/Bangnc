@@ -1,4 +1,4 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { userService } from '../services/user.service';
 import { PLANS } from '@ai-companions/shared';
