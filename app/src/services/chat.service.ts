@@ -110,4 +110,18 @@ export const chatService = {
     const response = await api.post(`/chat/conversations/${conversationId}/regenerate`);
     return response.data.data;
   },
+
+  async sendGift(conversationId: string, giftId: string): Promise<{
+    gift_message: Message;
+    ai_message: Message;
+    gift: any;
+    new_balance: number;
+  }> {
+    const response = await api.post(`/chat/conversations/${conversationId}/gift`, { gift_id: giftId });
+    return response.data.data;
+  },
+
+  async deleteMessage(conversationId: string, messageId: string): Promise<void> {
+    await api.delete(`/chat/conversations/${conversationId}/messages/${messageId}`);
+  },
 };

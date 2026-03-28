@@ -149,6 +149,41 @@ export const PLAN_LIMITS: Record<string, { daily_messages: number; max_character
   ultimate: { daily_messages: -1, max_characters: -1 },  // -1 = unlimited
 };
 
+// ---- Gifts ----
+export interface GiftDefinition {
+  id: string;
+  name: string;
+  icon: string;        // Ionicons name
+  cost: number;        // coin cost
+  category: 'romantic' | 'luxury' | 'fun' | 'special';
+  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  affinity: number;    // affinity points gained
+}
+
+export const GIFTS: GiftDefinition[] = [
+  { id: 'rose', name: 'Rose', icon: 'flower-outline', cost: 10, category: 'romantic', rarity: 'common', affinity: 5 },
+  { id: 'love_letter', name: 'Love Letter', icon: 'mail-outline', cost: 15, category: 'romantic', rarity: 'common', affinity: 8 },
+  { id: 'chocolate', name: 'Chocolate Box', icon: 'gift-outline', cost: 20, category: 'fun', rarity: 'common', affinity: 10 },
+  { id: 'teddy_bear', name: 'Teddy Bear', icon: 'heart-outline', cost: 30, category: 'fun', rarity: 'rare', affinity: 15 },
+  { id: 'perfume', name: 'Perfume', icon: 'water-outline', cost: 40, category: 'luxury', rarity: 'rare', affinity: 20 },
+  { id: 'star', name: 'Shooting Star', icon: 'star-outline', cost: 50, category: 'special', rarity: 'rare', affinity: 25 },
+  { id: 'necklace', name: 'Necklace', icon: 'sparkles-outline', cost: 75, category: 'luxury', rarity: 'epic', affinity: 35 },
+  { id: 'crown', name: 'Royal Crown', icon: 'trophy-outline', cost: 100, category: 'luxury', rarity: 'epic', affinity: 50 },
+  { id: 'diamond_ring', name: 'Diamond Ring', icon: 'diamond-outline', cost: 150, category: 'romantic', rarity: 'legendary', affinity: 75 },
+  { id: 'eternal_flame', name: 'Eternal Flame', icon: 'flame-outline', cost: 200, category: 'special', rarity: 'legendary', affinity: 100 },
+] as const;
+
+export const GIFT_COST_MAP: Record<string, GiftDefinition> = Object.fromEntries(
+  GIFTS.map(g => [g.id, g])
+);
+
+export const RARITY_COLORS: Record<string, string> = {
+  common: '#9CA3AF',
+  rare: '#3B82F6',
+  epic: '#A855F7',
+  legendary: '#F59E0B',
+};
+
 // ---- Generation Costs ----
 export const IMAGE_GEN_COST = 20;  // coins per image
 export const TTS_COST = 5;         // coins per TTS message

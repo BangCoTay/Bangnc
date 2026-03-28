@@ -3,7 +3,9 @@ import { AuthRequest } from '../middleware/auth';
 import { chatService } from '../services/chat.service';
 import { aiService } from '../services/ai.service';
 import { memoryService } from '../services/memory.service';
+import { coinService } from '../services/coin.service';
 import type { Character } from '@ai-companions/shared';
+import { GIFT_COST_MAP } from '@ai-companions/shared';
 import { logger } from '../utils/logger';
 
 export class ChatController {
@@ -186,6 +188,75 @@ export class ChatController {
       );
 
       res.json({ success: true, data: { ai_message: aiMessage } });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async sendGift(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { gift_id } = req.body;
+      const conversationId = req.params.id;
+
+      const gift = GIFT_COST_MAP[gift_id];
+      if (!gift) {
+        return res.status(400).json({ success: false, error: 'Invalid gift' });
+      }
+
+      const conversation = await chatService.getConversation(conversationId, req.user!.id);
+      const character = conversation.character as Character;
+
+      if (!character) {
+        return res.status(404).json({ success: false, error: 'Character not found' });
+      }
+
+      // Deduct coins
+      await coinService.deductCoins(
+        req.user!.id,
+        gift.cost,
+        'spend',
+        `Sent ${gift.name} to ${character.name}`,
+        conversationId,
+      );
+
+      // Save gift message
+      const giftMessage = await chatService.saveGiftMessage(
+        conversationId,
+        `*sends ${character.name} a ${gift.name}*`,
+        gift.id,
+      );
+
+      // Generate AI reaction to the gift
+      const giftPrompt = `[The user just sent you a ${gift.name} as a gift! React to receiving this gift in character. Be appreciative and expressive. Keep your response to 1-2 short paragraphs.]`;
+      const aiResponseContent = await aiService.generateResponse(character, conversation, giftPrompt);
+      const aiMessage = await chatService.saveMessage(
+        conversationId,
+        'character',
+        aiResponseContent,
+        character.id,
+      );
+
+      res.json({
+        success: true,
+        data: {
+          gift_message: giftMessage,
+          ai_message: aiMessage,
+          gift,
+          new_balance: await coinService.getBalance(req.user!.id),
+        },
+      });
+
+      this.triggerMemoryIfNeeded(conversationId, req.user!.id);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async deleteMessage(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id: conversationId, messageId } = req.params;
+      await chatService.deleteMessage(messageId, conversationId, req.user!.id);
+      res.json({ success: true, message: 'Message deleted' });
     } catch (err) {
       next(err);
     }

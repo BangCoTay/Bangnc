@@ -201,6 +201,72 @@ export class ChatService {
     if (error) throw error;
   }
 
+  async saveGiftMessage(
+    conversationId: string,
+    content: string,
+    giftId: string,
+  ): Promise<Message> {
+    const { data: message, error } = await supabaseAdmin
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        sender_type: 'user',
+        character_id: null,
+        content,
+        media_url: `gift:${giftId}`,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Update conversation
+    await supabaseAdmin
+      .from('conversations')
+      .update({
+        last_message_preview: content.substring(0, 100),
+        last_message_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId);
+
+    const { error: rpcError } = await supabaseAdmin.rpc('increment_message_count', { conv_id: conversationId });
+    if (rpcError) {
+      const { data: conv } = await supabaseAdmin
+        .from('conversations')
+        .select('message_count')
+        .eq('id', conversationId)
+        .single();
+      if (conv) {
+        await supabaseAdmin
+          .from('conversations')
+          .update({ message_count: (conv.message_count || 0) + 1 })
+          .eq('id', conversationId);
+      }
+    }
+
+    return message as Message;
+  }
+
+  async deleteMessage(messageId: string, conversationId: string, userId: string): Promise<void> {
+    // Verify ownership
+    const { data: conv } = await supabaseAdmin
+      .from('conversations')
+      .select('id')
+      .eq('id', conversationId)
+      .eq('user_id', userId)
+      .single();
+
+    if (!conv) throw new NotFoundError('Conversation');
+
+    const { error } = await supabaseAdmin
+      .from('messages')
+      .delete()
+      .eq('id', messageId)
+      .eq('conversation_id', conversationId);
+
+    if (error) throw error;
+  }
+
   async deleteLastAIMessage(conversationId: string): Promise<void> {
     const { data: lastMsg } = await supabaseAdmin
       .from('messages')

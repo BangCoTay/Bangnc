@@ -12,6 +12,8 @@ interface ChatState {
   // Streaming state
   streamingContent: string;
   isStreaming: boolean;
+  // Gift state
+  isSendingGift: boolean;
 
   fetchConversations: () => Promise<void>;
   startConversation: (characterId: string) => Promise<Conversation>;
@@ -20,6 +22,8 @@ interface ChatState {
   sendStreamingMessage: (content: string) => Promise<void>;
   regenerateResponse: () => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
+  sendGift: (giftId: string) => Promise<{ new_balance: number } | null>;
+  deleteMessage: (messageId: string) => Promise<void>;
   clearActiveChat: () => void;
 }
 
@@ -32,6 +36,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoadingConversations: false,
   streamingContent: '',
   isStreaming: false,
+  isSendingGift: false,
 
   fetchConversations: async () => {
     set({ isLoadingConversations: true });
@@ -216,4 +221,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearActiveChat: () => set({ activeConversation: null, messages: [], streamingContent: '', isStreaming: false }),
+
+  sendGift: async (giftId) => {
+    const state = get();
+    if (!state.activeConversation || state.isSendingGift) return null;
+
+    set({ isSendingGift: true });
+    try {
+      const result = await chatService.sendGift(state.activeConversation.id, giftId);
+      set((s) => ({
+        messages: [...s.messages, result.gift_message, result.ai_message],
+        isSendingGift: false,
+      }));
+      return { new_balance: result.new_balance };
+    } catch (err) {
+      set({ isSendingGift: false });
+      throw err;
+    }
+  },
+
+  deleteMessage: async (messageId) => {
+    const state = get();
+    if (!state.activeConversation) return;
+
+    try {
+      await chatService.deleteMessage(state.activeConversation.id, messageId);
+      set((s) => ({
+        messages: s.messages.filter((m) => m.id !== messageId),
+      }));
+    } catch {}
+  },
 }));

@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Dimensions, Keyboard, Alert,
+  Dimensions, Keyboard, Alert, Modal, ScrollView, Pressable,
+  Animated as RNAnimated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,14 +12,203 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
+import * as Clipboard from 'expo-clipboard';
 import { colors, typography, spacing, borderRadius } from '../../src/theme';
 import { useChatStore } from '../../src/stores/chatStore';
 import { voiceService } from '../../src/services/voice.service';
-import type { Message, Character } from '@ai-companions/shared';
+import { GIFTS, RARITY_COLORS } from '@ai-companions/shared';
+import type { Message, Character, GiftDefinition } from '@ai-companions/shared';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Streaming AI bubble — shows live text with a blinking cursor
+// ─── Helper: parse gift info from media_url ───
+const parseGift = (mediaUrl: string | null): GiftDefinition | null => {
+  if (!mediaUrl?.startsWith('gift:')) return null;
+  const giftId = mediaUrl.slice(5);
+  return GIFTS.find(g => g.id === giftId) || null;
+};
+
+// ─── Affinity Bar ───
+const AffinityBar = ({ messageCount }: { messageCount: number }) => {
+  const level = Math.floor(messageCount / 20) + 1;
+  const progress = (messageCount % 20) / 20;
+  const levelName = level <= 2 ? 'Stranger' : level <= 5 ? 'Friend' : level <= 10 ? 'Close Friend' : level <= 20 ? 'Soulmate' : 'Eternal Bond';
+
+  return (
+    <View style={affinityStyles.container}>
+      <View style={affinityStyles.row}>
+        <Ionicons name="heart" size={12} color={colors.accentPink} />
+        <Text style={affinityStyles.label}>Lv.{level} {levelName}</Text>
+      </View>
+      <View style={affinityStyles.barBg}>
+        <LinearGradient
+          colors={[colors.accentPink, colors.primary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[affinityStyles.barFill, { width: `${Math.max(5, progress * 100)}%` }]}
+        />
+      </View>
+    </View>
+  );
+};
+
+// ─── Gift Picker Modal ───
+const GiftPickerModal = ({
+  visible,
+  onClose,
+  onSend,
+  isSending,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSend: (gift: GiftDefinition) => void;
+  isSending: boolean;
+}) => {
+  const [selectedGift, setSelectedGift] = useState<GiftDefinition | null>(null);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={giftStyles.overlay} onPress={onClose}>
+        <Pressable style={giftStyles.sheet} onPress={() => {}}>
+          <View style={giftStyles.handle} />
+          <Text style={giftStyles.title}>Send a Gift</Text>
+          <Text style={giftStyles.subtitle}>Show your appreciation with a virtual gift</Text>
+
+          <View style={giftStyles.gridContainer}>
+            <ScrollView style={giftStyles.grid} showsVerticalScrollIndicator={false}>
+              <View style={giftStyles.gridInner}>
+                {GIFTS.map((gift) => {
+                  const isSelected = selectedGift?.id === gift.id;
+                  const rarityColor = RARITY_COLORS[gift.rarity];
+                  return (
+                    <TouchableOpacity
+                      key={gift.id}
+                      style={[
+                        giftStyles.giftCard,
+                        isSelected && { borderColor: rarityColor, borderWidth: 2 },
+                      ]}
+                      onPress={() => setSelectedGift(gift)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[giftStyles.iconCircle, { borderColor: rarityColor }]}>
+                        <Ionicons name={gift.icon as any} size={28} color={rarityColor} />
+                      </View>
+                      <Text style={giftStyles.giftName} numberOfLines={1}>{gift.name}</Text>
+                      <View style={giftStyles.costRow}>
+                        <Ionicons name="flash" size={12} color={colors.accentGold} />
+                        <Text style={giftStyles.costText}>{gift.cost}</Text>
+                      </View>
+                      <Text style={[giftStyles.rarityBadge, { color: rarityColor }]}>
+                        {gift.rarity.toUpperCase()}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+
+          {selectedGift && (
+            <View style={giftStyles.footer}>
+              <View style={giftStyles.footerInfo}>
+                <Ionicons name={selectedGift.icon as any} size={24} color={RARITY_COLORS[selectedGift.rarity]} />
+                <View style={{ marginLeft: spacing.sm, flex: 1 }}>
+                  <Text style={giftStyles.footerName}>{selectedGift.name}</Text>
+                  <Text style={giftStyles.footerAffinity}>+{selectedGift.affinity} affinity</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={giftStyles.sendBtn}
+                onPress={() => { onSend(selectedGift); setSelectedGift(null); }}
+                disabled={isSending}
+              >
+                {isSending ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="flash" size={16} color="#fff" />
+                    <Text style={giftStyles.sendBtnText}>{selectedGift.cost} Send</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+};
+
+// ─── Gift Bubble (special rendering for gift messages) ───
+const GiftBubble = ({ gift, content, timestamp }: { gift: GiftDefinition; content: string; timestamp: string }) => {
+  const rarityColor = RARITY_COLORS[gift.rarity];
+  return (
+    <View style={giftBubbleStyles.wrapper}>
+      <LinearGradient
+        colors={['rgba(124,58,237,0.15)', 'rgba(236,72,153,0.15)']}
+        style={giftBubbleStyles.container}
+      >
+        <View style={[giftBubbleStyles.iconCircle, { borderColor: rarityColor }]}>
+          <Ionicons name={gift.icon as any} size={32} color={rarityColor} />
+        </View>
+        <Text style={giftBubbleStyles.giftName}>{gift.name}</Text>
+        <Text style={giftBubbleStyles.action}>{content}</Text>
+        <Text style={[giftBubbleStyles.rarity, { color: rarityColor }]}>
+          {gift.rarity.toUpperCase()} GIFT
+        </Text>
+        <Text style={giftBubbleStyles.timestamp}>{timestamp}</Text>
+      </LinearGradient>
+    </View>
+  );
+};
+
+// ─── Message Action Sheet ───
+const MessageActionSheet = ({
+  visible,
+  message,
+  isLastAI,
+  onClose,
+  onCopy,
+  onDelete,
+  onRegenerate,
+}: {
+  visible: boolean;
+  message: Message | null;
+  isLastAI: boolean;
+  onClose: () => void;
+  onCopy: () => void;
+  onDelete: () => void;
+  onRegenerate: () => void;
+}) => {
+  if (!message) return null;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={actionStyles.overlay} onPress={onClose}>
+        <View style={actionStyles.sheet}>
+          <TouchableOpacity style={actionStyles.option} onPress={onCopy}>
+            <Ionicons name="copy-outline" size={20} color={colors.textPrimary} />
+            <Text style={actionStyles.optionText}>Copy Text</Text>
+          </TouchableOpacity>
+          {isLastAI && (
+            <TouchableOpacity style={actionStyles.option} onPress={onRegenerate}>
+              <Ionicons name="refresh-outline" size={20} color={colors.primary} />
+              <Text style={[actionStyles.optionText, { color: colors.primary }]}>Regenerate</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={actionStyles.option} onPress={onDelete}>
+            <Ionicons name="trash-outline" size={20} color={colors.error} />
+            <Text style={[actionStyles.optionText, { color: colors.error }]}>Delete</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[actionStyles.option, actionStyles.cancel]} onPress={onClose}>
+            <Text style={actionStyles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+};
+
+// ─── Streaming AI bubble ───
 const StreamingBubble = ({ content, character }: { content: string; character?: Character }) => {
   const [showCursor, setShowCursor] = useState(true);
 
@@ -48,7 +238,7 @@ const StreamingBubble = ({ content, character }: { content: string; character?: 
   );
 };
 
-// Typing indicator — 3 animated dots
+// ─── Typing indicator ───
 const TypingIndicator = () => (
   <View style={styles.typingContainer}>
     <View style={styles.typingBubble}>
@@ -65,7 +255,9 @@ export default function ChatScreen() {
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const {
     activeConversation, messages, isLoading, isSending, isStreaming, streamingContent,
+    isSendingGift,
     loadConversation, sendStreamingMessage, regenerateResponse, clearActiveChat,
+    sendGift, deleteMessage,
   } = useChatStore();
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
@@ -76,6 +268,11 @@ export default function ChatScreen() {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [generatingVoiceId, setGeneratingVoiceId] = useState<string | null>(null);
+
+  // Gift & Action State
+  const [showGiftPicker, setShowGiftPicker] = useState(false);
+  const [actionMessage, setActionMessage] = useState<Message | null>(null);
+  const [showActions, setShowActions] = useState(false);
 
   const isGroup = activeConversation?.is_group;
   const mainCharacter = activeConversation?.character as Character | undefined;
@@ -118,6 +315,54 @@ export default function ChatScreen() {
     await sendStreamingMessage(text);
   };
 
+  const handleSendGift = async (gift: GiftDefinition) => {
+    try {
+      const result = await sendGift(gift.id);
+      setShowGiftPicker(false);
+      if (result) {
+        // Could show a toast with new balance
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Failed to send gift';
+      Alert.alert('Gift Error', msg);
+    }
+  };
+
+  const handleMessageLongPress = useCallback((message: Message) => {
+    setActionMessage(message);
+    setShowActions(true);
+  }, []);
+
+  const handleCopyMessage = useCallback(async () => {
+    if (actionMessage) {
+      await Clipboard.setStringAsync(actionMessage.content);
+      setShowActions(false);
+      setActionMessage(null);
+    }
+  }, [actionMessage]);
+
+  const handleDeleteMessage = useCallback(() => {
+    if (!actionMessage) return;
+    Alert.alert('Delete Message', 'Are you sure you want to delete this message?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          deleteMessage(actionMessage.id);
+          setShowActions(false);
+          setActionMessage(null);
+        },
+      },
+    ]);
+  }, [actionMessage]);
+
+  const handleRegenerate = useCallback(() => {
+    setShowActions(false);
+    setActionMessage(null);
+    regenerateResponse();
+  }, []);
+
   const startRecording = async () => {
     try {
       if (sound) await sound.unloadAsync();
@@ -138,7 +383,6 @@ export default function ChatScreen() {
       const uri = recording.getURI();
       setRecording(null);
       if (uri) {
-        // Upload audio for speech-to-text
         const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
         const textToInject = await voiceService.speechToText(base64);
         if (textToInject) setInputText(textToInject);
@@ -152,29 +396,24 @@ export default function ChatScreen() {
   const togglePlayAudio = async (message: Message, voiceId: string = 'nova') => {
     try {
       if (playingId === message.id) {
-        // Stop currently playing
         await sound?.stopAsync();
         setPlayingId(null);
         return;
       }
-      
-      // Stop any existing sound
       if (sound) await sound.unloadAsync();
-      
+
       let finalAudioUrl = message.audio_url;
 
-      // If no audio_url, generate TTS on the fly
       if (!finalAudioUrl) {
         setGeneratingVoiceId(message.id);
         finalAudioUrl = await voiceService.textToSpeech(message.content, voiceId);
-        // Note: In a real app we'd update the message in the backend here to cache it
       }
 
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: finalAudioUrl! },
         { shouldPlay: true }
       );
-      
+
       setSound(newSound);
       setPlayingId(message.id);
       setGeneratingVoiceId(null);
@@ -196,18 +435,28 @@ export default function ChatScreen() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const lastAIMessageId = [...messages].reverse().find(m => m.sender_type === 'character')?.id;
+
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
     const isUser = item.sender_type === 'user';
-    
-    // For group chats, we use the specific character from the joined DB result
-    // Otherwise fallback to main conversation character
     const msgChar = item.character || mainCharacter;
-    
-    // In groups, show avatar if the sender changes. In 1v1, same logic.
     const showAvatar = !isUser && (index === 0 || messages[index - 1]?.sender_type !== item.sender_type || messages[index - 1]?.character_id !== item.character_id);
 
+    // Check if this is a gift message
+    const gift = parseGift(item.media_url);
+    if (gift && isUser) {
+      return (
+        <Pressable onLongPress={() => handleMessageLongPress(item)}>
+          <GiftBubble gift={gift} content={item.content} timestamp={formatTime(item.created_at)} />
+        </Pressable>
+      );
+    }
+
+    // Check if this message has an image (non-gift media_url)
+    const hasImage = item.media_url && !item.media_url.startsWith('gift:');
+
     return (
-      <View style={[styles.messageRow, isUser && styles.messageRowUser]}>
+      <Pressable onLongPress={() => handleMessageLongPress(item)} style={[styles.messageRow, isUser && styles.messageRowUser]}>
         {!isUser && (
           <View style={styles.avatarSlot}>
             {showAvatar ? (
@@ -240,20 +489,27 @@ export default function ChatScreen() {
               </LinearGradient>
             ) : (
               <View>
+                {hasImage && (
+                  <Image
+                    source={{ uri: item.media_url! }}
+                    style={styles.mediaImage}
+                    contentFit="cover"
+                  />
+                )}
                 <Text style={[styles.messageText, styles.aiMessageText]}>{item.content}</Text>
-                
+
                 {/* Voice Play Button for AI */}
-                <TouchableOpacity 
-                  style={styles.voicePlayBtn} 
+                <TouchableOpacity
+                  style={styles.voicePlayBtn}
                   onPress={() => togglePlayAudio(item, (msgChar as any)?.voice_id || 'nova')}
                 >
                   {generatingVoiceId === item.id ? (
                     <ActivityIndicator size="small" color={colors.primary} />
                   ) : (
-                    <Ionicons 
-                      name={playingId === item.id ? "stop-circle" : "play-circle"} 
-                      size={24} 
-                      color={colors.primary} 
+                    <Ionicons
+                      name={playingId === item.id ? "stop-circle" : "play-circle"}
+                      size={24}
+                      color={colors.primary}
                     />
                   )}
                   <Text style={styles.voicePlayText}>
@@ -267,16 +523,16 @@ export default function ChatScreen() {
             </Text>
           </View>
         </View>
-      </View>
+      </Pressable>
     );
   };
 
-  // Determine footer component: streaming bubble > typing dots > nothing
+  // Footer: streaming bubble > typing dots > nothing
   const ListFooter = () => {
     if (isStreaming && streamingContent) {
       return <StreamingBubble content={streamingContent} character={mainCharacter} />;
     }
-    if (isSending && !isStreaming) {
+    if ((isSending && !isStreaming) || isSendingGift) {
       return <TypingIndicator />;
     }
     return null;
@@ -317,16 +573,20 @@ export default function ChatScreen() {
               </LinearGradient>
             )
           )}
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.headerName}>
               {isGroup ? 'Group Chat' : mainCharacter?.name || 'Character'}
             </Text>
             <View style={styles.onlineRow}>
               <View style={styles.onlineDot} />
               <Text style={styles.onlineText}>
-                {isStreaming ? 'Typing...' : 'Online'}
+                {isStreaming ? 'Typing...' : isSendingGift ? 'Reacting...' : 'Online'}
               </Text>
             </View>
+            {/* Affinity Bar */}
+            {!isGroup && activeConversation && (
+              <AffinityBar messageCount={activeConversation.message_count || 0} />
+            )}
           </View>
         </TouchableOpacity>
         <View style={styles.headerActions}>
@@ -355,16 +615,22 @@ export default function ChatScreen() {
 
         {/* Input */}
         <View style={styles.inputContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.inputAction}
             onPressIn={startRecording}
             onPressOut={stopRecording}
           >
-            <Ionicons 
-              name={isRecording ? "mic" : "mic-outline"} 
-              size={26} 
-              color={isRecording ? colors.error : colors.textMuted} 
+            <Ionicons
+              name={isRecording ? "mic" : "mic-outline"}
+              size={24}
+              color={isRecording ? colors.error : colors.textMuted}
             />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.inputAction}
+            onPress={() => setShowGiftPicker(true)}
+          >
+            <Ionicons name="gift-outline" size={24} color={colors.accentPink} />
           </TouchableOpacity>
           <View style={styles.inputWrapper}>
             <TextInput
@@ -390,9 +656,32 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Gift Picker */}
+      <GiftPickerModal
+        visible={showGiftPicker}
+        onClose={() => setShowGiftPicker(false)}
+        onSend={handleSendGift}
+        isSending={isSendingGift}
+      />
+
+      {/* Message Actions */}
+      <MessageActionSheet
+        visible={showActions}
+        message={actionMessage}
+        isLastAI={actionMessage?.id === lastAIMessageId}
+        onClose={() => { setShowActions(false); setActionMessage(null); }}
+        onCopy={handleCopyMessage}
+        onDelete={handleDeleteMessage}
+        onRegenerate={handleRegenerate}
+      />
     </SafeAreaView>
   );
 }
+
+// ═══════════════════════════════════════════════════
+// STYLES
+// ═══════════════════════════════════════════════════
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
@@ -457,6 +746,13 @@ const styles = StyleSheet.create({
   },
   timestampUser: { color: 'rgba(255,255,255,0.6)' },
 
+  mediaImage: {
+    width: SCREEN_WIDTH * 0.6,
+    height: SCREEN_WIDTH * 0.45,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.sm,
+  },
+
   voicePlayBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     marginTop: spacing.sm, paddingTop: spacing.sm,
@@ -484,12 +780,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: colors.divider,
     paddingBottom: Platform.OS === 'ios' ? spacing.sm : spacing.sm,
   },
-  inputAction: { padding: spacing.sm },
+  inputAction: { padding: spacing.xs, marginBottom: 4 },
   inputWrapper: {
     flex: 1, backgroundColor: colors.inputBg,
     borderRadius: borderRadius.xl, paddingHorizontal: spacing.base,
     borderWidth: 1, borderColor: colors.inputBorder,
-    maxHeight: 120,
+    maxHeight: 120, marginHorizontal: spacing.xs,
   },
   textInput: {
     fontSize: typography.size.base, color: colors.textPrimary,
@@ -499,7 +795,148 @@ const styles = StyleSheet.create({
   sendButton: {
     width: 40, height: 40, borderRadius: 20,
     justifyContent: 'center', alignItems: 'center',
-    marginLeft: spacing.xs,
   },
   sendButtonActive: { backgroundColor: colors.primary },
+});
+
+// ─── Affinity Styles ───
+const affinityStyles = StyleSheet.create({
+  container: { marginTop: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
+  label: { fontSize: 10, color: colors.accentPink, fontWeight: '600' },
+  barBg: {
+    height: 3, backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 2, overflow: 'hidden', width: 100,
+  },
+  barFill: { height: '100%', borderRadius: 2 },
+});
+
+// ─── Gift Picker Styles ───
+const giftStyles = StyleSheet.create({
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: spacing.sm, paddingHorizontal: spacing.base,
+    paddingBottom: Platform.OS === 'ios' ? spacing.xl : spacing.lg,
+    height: SCREEN_WIDTH > 400 ? 550 : 480,
+    maxHeight: '85%',
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: colors.textMuted, alignSelf: 'center', marginBottom: spacing.md,
+  },
+  title: {
+    fontSize: typography.size.xl, fontWeight: '700',
+    color: colors.textPrimary, textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: typography.size.sm, color: colors.textSecondary,
+    textAlign: 'center', marginTop: 4, marginBottom: spacing.md,
+  },
+  gridContainer: {
+    flex: 1,
+    marginTop: spacing.sm,
+  },
+  grid: {
+    flex: 1,
+  },
+  gridInner: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  giftCard: {
+    width: (SCREEN_WIDTH - spacing.base * 2 - spacing.sm * 3) / 4,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.lg,
+    padding: spacing.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.divider,
+    marginBottom: spacing.xs,
+  },
+  iconCircle: {
+    width: 48, height: 48, borderRadius: 24,
+    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(124,58,237,0.1)', borderWidth: 1,
+    marginBottom: 6,
+  },
+  giftName: {
+    fontSize: 10, color: colors.textPrimary, fontWeight: '600',
+    textAlign: 'center', marginBottom: 2,
+  },
+  costRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  costText: { fontSize: 10, color: colors.accentGold, fontWeight: '700' },
+  rarityBadge: { fontSize: 8, fontWeight: '800', marginTop: 2 },
+  footer: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider,
+    marginTop: spacing.sm,
+  },
+  footerInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  footerName: { fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
+  footerAffinity: { fontSize: typography.size.xs, color: colors.accentPink },
+  sendBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: colors.primary, paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm, borderRadius: borderRadius.xl,
+  },
+  sendBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.size.sm },
+});
+
+// ─── Gift Bubble Styles ───
+const giftBubbleStyles = StyleSheet.create({
+  wrapper: {
+    alignItems: 'center', marginBottom: spacing.md,
+    paddingHorizontal: spacing.xl,
+  },
+  container: {
+    borderRadius: borderRadius.xl, padding: spacing.base,
+    alignItems: 'center', borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.2)', width: SCREEN_WIDTH * 0.6,
+  },
+  iconCircle: {
+    width: 56, height: 56, borderRadius: 28,
+    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 2,
+    marginBottom: spacing.sm,
+  },
+  giftName: {
+    fontSize: typography.size.lg, fontWeight: '700',
+    color: colors.textPrimary, marginBottom: 2,
+  },
+  action: { fontSize: typography.size.sm, color: colors.textSecondary, fontStyle: 'italic' },
+  rarity: { fontSize: 10, fontWeight: '800', marginTop: 6, letterSpacing: 1 },
+  timestamp: {
+    fontSize: typography.size.xs, color: 'rgba(255,255,255,0.4)', marginTop: 4,
+  },
+});
+
+// ─── Message Action Styles ───
+const actionStyles = StyleSheet.create({
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center', alignItems: 'center', padding: spacing.xl,
+  },
+  sheet: {
+    backgroundColor: colors.surface, borderRadius: borderRadius.xl,
+    width: '100%', maxWidth: 300, overflow: 'hidden',
+  },
+  option: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.base,
+    borderBottomWidth: 1, borderBottomColor: colors.divider,
+  },
+  optionText: { fontSize: typography.size.base, color: colors.textPrimary, fontWeight: '500' },
+  cancel: {
+    justifyContent: 'center', borderBottomWidth: 0,
+  },
+  cancelText: { fontSize: typography.size.base, color: colors.textMuted, fontWeight: '500', textAlign: 'center' },
 });

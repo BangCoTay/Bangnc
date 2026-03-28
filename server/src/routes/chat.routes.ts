@@ -14,5 +14,7 @@ router.delete('/conversations/:id', authMiddleware, (req: Request, res: Response
 router.post('/conversations/:id/messages', authMiddleware, chatLimiter, validate(sendMessageSchema), (req: Request, res: Response, next: NextFunction) => chatController.sendMessage(req, res, next));
 router.post('/conversations/:id/stream', authMiddleware, chatLimiter, validate(sendMessageSchema), (req: Request, res: Response, next: NextFunction) => chatController.streamMessage(req, res, next));
 router.post('/conversations/:id/regenerate', authMiddleware, chatLimiter, (req: Request, res: Response, next: NextFunction) => chatController.regenerate(req, res, next));
+router.post('/conversations/:id/gift', authMiddleware, chatLimiter, (req: Request, res: Response, next: NextFunction) => chatController.sendGift(req, res, next));
+router.delete('/conversations/:id/messages/:messageId', authMiddleware, (req: Request, res: Response, next: NextFunction) => chatController.deleteMessage(req, res, next));
 
 export default router;
