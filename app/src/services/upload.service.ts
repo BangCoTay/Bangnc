@@ -1,4 +1,6 @@
 import { supabase } from './supabase';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
 
 export const uploadService = {
   async uploadImage(uri: string, prefix = 'avatars'): Promise<string> {
@@ -6,15 +8,16 @@ export const uploadService = {
       const extMatch = uri.match(/\.(\w+)$/);
       const ext = extMatch ? extMatch[1] : 'jpg';
       const fileName = `${prefix}/${Date.now()}.${ext}`;
+      const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
 
-      const response = await fetch(uri);
-      if (!response.ok) throw new Error('Failed to fetch local file');
-      const blob = await response.blob();
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: 'base64',
+      });
 
       const { data, error } = await supabase.storage
         .from('images')
-        .upload(fileName, blob, {
-          contentType: blob.type || `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+        .upload(fileName, decode(base64), {
+          contentType,
           upsert: false,
         });
 

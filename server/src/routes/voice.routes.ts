@@ -13,8 +13,8 @@ router.post('/tts', authMiddleware, async (req: AuthRequest, res: Response, next
     if (!text) {
       return res.status(400).json({ success: false, error: 'Text is required' });
     }
-    const audioUrl = await voiceService.textToSpeech(text, voice || 'nova', req.user!.id);
-    res.json({ success: true, data: { audio_url: audioUrl } });
+    const result = await voiceService.textToSpeech(text, voice || 'nova', req.user!.id);
+    res.json({ success: true, data: result });
   } catch (err) { next(err); }
 });
 

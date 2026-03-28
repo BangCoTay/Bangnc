@@ -19,6 +19,7 @@
     "@shopify/flash-list": "2.0.2",
     "@supabase/supabase-js": "^2.39.0",
     "axios": "^1.13.6",
+    "base64-arraybuffer": "^1.0.2",
     "color": "^5.0.3",
     "color-string": "^2.1.4",
     "expo": "~54.0.33",

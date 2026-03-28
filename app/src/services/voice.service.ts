@@ -1,9 +1,9 @@
 import { api } from './api';
 
 export const voiceService = {
-  async textToSpeech(text: string, voice: string = 'nova'): Promise<string> {
+  async textToSpeech(text: string, voice: string = 'nova'): Promise<{ audioUrl: string; newBalance?: number }> {
     const response = await api.post('/voice/tts', { text, voice });
-    return response.data.data.audio_url;
+    return response.data.data;
   },
 
   async speechToText(audioBase64: string, mimeType: string = 'audio/mpeg'): Promise<string> {

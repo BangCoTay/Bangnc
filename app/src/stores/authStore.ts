@@ -15,6 +15,7 @@ interface AuthState {
   checkAuth: () => Promise<boolean>;
   clearError: () => void;
   setUser: (user: Profile) => void;
+  updateBalance: (newBalance: number) => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -81,4 +82,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearError: () => set({ error: null }),
   setUser: (user) => set({ user }),
+  updateBalance: (newBalance) => set((state) => ({
+    user: state.user ? { ...state.user, coin_balance: newBalance } : null
+  })),
 }));

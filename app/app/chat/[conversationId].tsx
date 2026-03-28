@@ -33,6 +33,7 @@ import {
 import * as FileSystem from "expo-file-system/legacy";
 import * as Clipboard from "expo-clipboard";
 import { colors, typography, spacing, borderRadius } from "../../src/theme";
+import { useAuthStore } from "../../src/stores/authStore";
 import { useChatStore } from "../../src/stores/chatStore";
 import { voiceService } from "../../src/services/voice.service";
 import { GIFTS, RARITY_COLORS } from "@ai-companions/shared";
@@ -91,13 +92,16 @@ const GiftPickerModal = ({
   onClose,
   onSend,
   isSending,
+  balance,
 }: {
   visible: boolean;
   onClose: () => void;
   onSend: (gift: GiftDefinition) => void;
   isSending: boolean;
+  balance: number;
 }) => {
   const [selectedGift, setSelectedGift] = useState<GiftDefinition | null>(null);
+  const canAfford = selectedGift ? balance >= selectedGift.cost : true;
 
   return (
     <Modal
@@ -113,6 +117,11 @@ const GiftPickerModal = ({
           <Text style={giftStyles.subtitle}>
             Show your appreciation with a virtual gift
           </Text>
+
+          <View style={giftStyles.balancePill}>
+            <Ionicons name="flash" size={14} color={colors.accentGold} />
+            <Text style={giftStyles.balanceText}>{balance} Coins</Text>
+          </View>
 
           <View style={giftStyles.gridContainer}>
             <ScrollView
@@ -187,12 +196,15 @@ const GiftPickerModal = ({
                 </View>
               </View>
               <TouchableOpacity
-                style={giftStyles.sendBtn}
                 onPress={() => {
                   onSend(selectedGift);
                   setSelectedGift(null);
                 }}
-                disabled={isSending}
+                disabled={isSending || !canAfford}
+                style={[
+                  giftStyles.sendBtn,
+                  !canAfford && { backgroundColor: colors.textDisabled },
+                ]}
               >
                 {isSending ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -200,7 +212,7 @@ const GiftPickerModal = ({
                   <>
                     <Ionicons name="flash" size={16} color="#fff" />
                     <Text style={giftStyles.sendBtnText}>
-                      {selectedGift.cost} Send
+                      {!canAfford ? "Insufficient" : `${selectedGift.cost} Send`}
                     </Text>
                   </>
                 )}
@@ -534,6 +546,7 @@ export default function ChatScreen() {
     sendGift,
     deleteMessage,
   } = useChatStore();
+  const { user, loadProfile, updateBalance } = useAuthStore();
   const [inputText, setInputText] = useState("");
   const flatListRef = useRef<FlatList>(null);
 
@@ -559,6 +572,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (conversationId) {
       loadConversation(conversationId);
+      loadProfile();
     }
     return () => {
       clearActiveChat();
@@ -568,7 +582,8 @@ export default function ChatScreen() {
   // Request audio permissions for recording
   useEffect(() => {
     requestRecordingPermissionsAsync();
-    setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+    // Default to playback mode (speaker)
+    setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
   }, []);
 
   // Auto-clear playing state when audio finishes
@@ -582,6 +597,9 @@ export default function ChatScreen() {
   // Handle auto-playback when target URL is set
   useEffect(() => {
     if (playingUrl && audioPlayer) {
+      // Ensure volume is at maximum
+      audioPlayer.volume = 1.0;
+      
       // Small delay ensures the player has correctly loaded the new source
       const timer = setTimeout(() => {
         audioPlayer.play();
@@ -623,7 +641,7 @@ export default function ChatScreen() {
       const result = await sendGift(gift.id);
       setShowGiftPicker(false);
       if (result) {
-        // Could show a toast with new balance
+        updateBalance(result.new_balance);
       }
     } catch (err: any) {
       const msg =
@@ -679,6 +697,10 @@ export default function ChatScreen() {
         setPlayingId(null);
         setPlayingUrl(null);
       }
+      
+      // Ensure recording is allowed before starting
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+      
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
       setIsRecording(true);
@@ -692,6 +714,10 @@ export default function ChatScreen() {
       if (!isRecording) return;
       setIsRecording(false);
       await audioRecorder.stop();
+      
+      // Reset back to playback mode (speaker) after recording
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
+      
       const uri = audioRecorder.uri;
       if (uri) {
         const base64 = await FileSystem.readAsStringAsync(uri, {
@@ -706,6 +732,8 @@ export default function ChatScreen() {
     } catch (err) {
       console.error("Failed to stop recording", err);
       setIsRecording(false);
+      // Ensure we reset mode even on error
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
     }
   };
 
@@ -727,16 +755,23 @@ export default function ChatScreen() {
       if (!finalAudioUrl) {
         setGeneratingVoiceId(message.id);
         try {
-          finalAudioUrl = await voiceService.textToSpeech(
+          const result = await voiceService.textToSpeech(
             message.content,
             voiceId,
           );
+          finalAudioUrl = result.audioUrl;
+          if (result.newBalance !== undefined) {
+            updateBalance(result.newBalance);
+          }
         } finally {
           setGeneratingVoiceId(null);
         }
       }
 
       // Set the URL — the playback effect will handle starting the audio
+      // Force output to speaker by disabling recording mode temporarily
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
+      
       setPlayingUrl(finalAudioUrl!);
       setPlayingId(message.id);
     } catch (err) {
@@ -854,7 +889,14 @@ export default function ChatScreen() {
             )}
           </View>
         </TouchableOpacity>
+
         <View style={styles.headerActions}>
+          <View style={styles.headerBalance}>
+            <Ionicons name="flash" size={14} color={colors.accentGold} />
+            <Text style={styles.headerBalanceText}>
+              {user?.coin_balance || 0}
+            </Text>
+          </View>
           <TouchableOpacity style={styles.headerActionBtn}>
             <Ionicons
               name="ellipsis-horizontal"
@@ -951,6 +993,7 @@ export default function ChatScreen() {
         onClose={() => setShowGiftPicker(false)}
         onSend={handleSendGift}
         isSending={isSendingGift}
+        balance={user?.coin_balance || 0}
       />
 
       {/* Message Actions */}
@@ -1030,8 +1073,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.online,
   },
   onlineText: { fontSize: typography.size.xs, color: colors.online },
-  headerActions: { flexDirection: "row" },
+  headerActions: { flexDirection: "row", alignItems: "center" },
   headerActionBtn: { padding: spacing.sm },
+  headerBalance: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: borderRadius.lg,
+    gap: 4,
+    marginRight: spacing.xs,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.2)",
+  },
+  headerBalanceText: {
+    fontSize: typography.size.sm,
+    fontWeight: "700",
+    color: colors.accentGold,
+  },
 
   // Messages
   messageList: { paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
@@ -1230,6 +1290,25 @@ const giftStyles = StyleSheet.create({
   gridContainer: {
     flex: 1,
     marginTop: spacing.sm,
+  },
+  balancePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    alignSelf: "center",
+    paddingHorizontal: spacing.base,
+    paddingVertical: 6,
+    borderRadius: borderRadius.lg,
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.2)",
+  },
+  balanceText: {
+    fontSize: typography.size.sm,
+    fontWeight: "700",
+    color: colors.accentGold,
   },
   grid: {
     flex: 1,

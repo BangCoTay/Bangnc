@@ -12,11 +12,13 @@ export class VoiceService {
     text: string,
     voice: string = 'nova',
     userId?: string,
-  ): Promise<string> {
+  ): Promise<{ audioUrl: string; newBalance?: number }> {
     try {
+      let newBalance: number | undefined;
       // Deduct coins if userId is provided
       if (userId) {
-        await coinService.deductCoins(userId, TTS_COST, 'spend', 'Text-to-speech generation');
+        const tx = await coinService.deductCoins(userId, TTS_COST, 'spend', 'Text-to-speech generation');
+        newBalance = tx.balance_after;
       }
 
       const response = await openai.audio.speech.create({
@@ -46,7 +48,7 @@ export class VoiceService {
         .getPublicUrl(fileName);
 
       logger.info({ voice, textLength: text.length }, 'TTS generated');
-      return publicUrl.publicUrl;
+      return { audioUrl: publicUrl.publicUrl, newBalance };
     } catch (err: any) {
       // Refund coins on failure
       if (userId) {
