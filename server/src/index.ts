@@ -25,7 +25,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(generalLimiter);
 
 // Health check
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', (_req: express.Request, res: express.Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
@@ -40,7 +40,7 @@ app.use('/api/v1/voice', voiceRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 
 // 404 handler
-app.use((_req, res) => {
+app.use((_req: express.Request, res: express.Response) => {
   res.status(404).json({ success: false, error: 'Route not found' });
 });
 

@@ -63,7 +63,7 @@ export class VoiceService {
   async speechToText(audioBuffer: Buffer, mimeType: string = 'audio/mpeg'): Promise<string> {
     try {
       // Create a File-like object for the API
-      const file = new File([audioBuffer], 'audio.mp3', { type: mimeType });
+      const file = new File([audioBuffer as any], 'audio.mp3', { type: mimeType });
 
       const transcription = await openai.audio.transcriptions.create({
         model: 'whisper-1',
